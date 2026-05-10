@@ -1,0 +1,505 @@
+-- EggData.lua
+
+local EggData = {
+
+    ['Legendary Egg'] = {
+        'Silver Monkey',
+        'Cow',
+        'Sea Otter',
+        'Turtle',
+        'Polar Bear',
+    },
+
+    ['Rare Egg'] = {
+        'Orange Tabby',
+        'Monkey',
+        'Spotted Deer',
+        'Rooster',
+        'Pig',
+    },
+
+    ['Uncommon Egg'] = {
+        'Black Bunny',
+        'Cat',
+        'Deer',
+        'Chicken',
+    },
+
+    ['Bird Egg'] = {
+        'Black Bird',
+        'Cuckoo',
+        'Brown Owl',
+        'Gold Finch',
+        'Birb',
+    },
+
+    ['Premium Bird Egg'] = {
+        'Black Bird',
+        'Cuckoo',
+        'Brown Owl',
+        'Gold Finch',
+        'Birb',
+    },
+
+    ['Rainbow Premium Bird Egg'] = {
+        'Rainbow Black Bird',
+        'Rainbow Cuckoo',
+        'Rainbow Brown Owl',
+        'Rainbow Gold Finch',
+        'Rainbow Birb',
+    },
+
+    ['Common Egg'] = {
+        'Dog',
+        'Golden Lab',
+        'Bunny',
+    },
+
+    ['Mythical Egg'] = {
+        'Grey Mouse',
+        'Squirrel',
+        'Brown Mouse',
+        'Red Giant Ant',
+        'Red Fox',
+    },
+
+    ['Bug Egg'] = {
+        'Dragonfly',
+        'Praying Mantis',
+        'Giant Ant',
+        'Snail',
+        'Caterpillar',
+    },
+
+    ['Exotic Bug Egg'] = {
+        'Dragonfly',
+        'Praying Mantis',
+        'Caterpillar',
+        'Giant Ant',
+        'Snail',
+    },
+
+    ['Night Egg'] = {
+        'Raccoon',
+        'Night Owl',
+        'Echo Frog',
+        'Frog',
+        'Mole',
+        'Hedgehog',
+    },
+
+    ['Bee Egg'] = {
+        'Queen Bee',
+        'Petal Bee',
+        'Bear Bee',
+        'Honey Bee',
+        'Bee',
+    },
+
+    ['Anti Bee Egg'] = {
+        'Disco Bee',
+        'Butterfly',
+        'Moth',
+        'Tarantula Hawk',
+        'Wasp',
+    },
+
+    ['Premium Anti Bee Egg'] = {
+        'Disco Bee',
+        'Butterfly',
+        'Moth',
+        'Tarantula Hawk',
+        'Wasp',
+    },
+
+    ['Premium Night Egg'] = {
+        'Raccoon',
+        'Night Owl',
+        'Echo Frog',
+        'Frog',
+        'Mole',
+        'Hedgehog',
+    },
+
+    ['Common Summer Egg'] = {
+        'Starfish',
+        'Crab',
+        'Seagull',
+    },
+
+    ['Rare Summer Egg'] = {
+        'Flamingo',
+        'Toucan',
+        'Sea Turtle',
+        'Orangutan',
+        'Seal',
+    },
+
+    ['Paradise Egg'] = {
+        'Ostrich',
+        'Peacock',
+        'Capybara',
+        'Scarlet Macaw',
+        'Mimic Octopus',
+    },
+
+    ['Oasis Egg'] = {
+        'Meerkat',
+        'Sand Snake',
+        'Axolotl',
+        'Hyacinth Macaw',
+        'Fennec Fox',
+    },
+
+    ['Premium Oasis Egg'] = {
+        'Meerkat',
+        'Sand Snake',
+        'Axolotl',
+        'Hyacinth Macaw',
+        'Fennec Fox',
+    },
+
+    ['Dinosaur Egg'] = {
+        'Raptor',
+        'Triceratops',
+        'Stegosaurus',
+        'Pterodactyl',
+        'Brontosaurus',
+        'T-Rex',
+    },
+
+    ['Primal Egg'] = {
+        'Parasaurolophus',
+        'Iguanodon',
+        'Pachycephalosaurus',
+        'Dilophosaurus',
+        'Ankylosaurus',
+        'Spinosaurus',
+    },
+
+    ['Premium Primal Egg'] = {
+        'Parasaurolophus',
+        'Iguanodon',
+        'Pachycephalosaurus',
+        'Dilophosaurus',
+        'Ankylosaurus',
+        'Spinosaurus',
+    },
+
+    ['Rainbow Premium Primal Egg'] = {
+        'Rainbow Parasaurolophus',
+        'Rainbow Iguanodon',
+        'Rainbow Pachycephalosaurus',
+        'Rainbow Dilophosaurus',
+        'Rainbow Ankylosaurus',
+        'Rainbow Spinosaurus',
+    },
+
+    ['Zen Egg'] = {
+        'Shiba Inu',
+        'Nihonzaru',
+        'Tanuki',
+        'Tanchozuru',
+        'Kappa',
+        'Kitsune',
+    },
+
+    ['Gourmet Egg'] = {
+        'Bagel Bunny',
+        'Pancake Mole',
+        'Sushi Bear',
+        'Spaghetti Sloth',
+        'French Fry Ferret',
+    },
+
+    ['Sprout Egg'] = {
+        'Dairy Cow',
+        'Jackalope',
+        'Seedling',
+        'Golem',
+        'Golden Goose',
+    },
+
+    ['Enchanted Egg'] = {
+        'Ladybug',
+        'Pixie',
+        'Imp',
+        'Glimmering Sprite',
+        'Cockatrice',
+    },
+
+    ['Fall Egg'] = {
+        'Robin',
+        'Badger',
+        'Grizzly Bear',
+        'Barn Owl',
+        'Swan',
+    },
+
+    ['Premium Fall Egg'] = {
+        'Robin',
+        'Badger',
+        'Grizzly Bear',
+        'Barn Owl',
+        'Swan',
+    },
+
+    ['GIANT Premium Fall Egg'] = {
+        'GIANT Robin',
+        'GIANT Badger',
+        'GIANT Grizzly Bear',
+        'GIANT Barn Owl',
+        'GIANT Swan',
+    },
+
+    ['Jungle Egg'] = {
+        'Tree Frog',
+        'Hummingbird',
+        'Iguana',
+        'Chimpanzee',
+        'Tiger',
+    },
+
+    ['Spooky Egg'] = {
+        'Bat',
+        'Bone Dog',
+        'Spider',
+        'Black Cat',
+        'Headless Horseman',
+    },
+
+    ['Premium Spooky Egg'] = {
+        'Bat',
+        'Bone Dog',
+        'Spider',
+        'Black Cat',
+        'Headless Horseman',
+    },
+
+    ['Ghostly Premium Spooky Egg'] = {
+        'Ghostly Bat',
+        'Ghostly Bone Dog',
+        'Ghostly Spider',
+        'Ghostly Black Cat',
+        'Ghostly Headless Horseman',
+    },
+
+    ['Safari Egg'] = {
+        'Oxpecker',
+        'Zebra',
+        'Giraffe',
+        'Rhino',
+        'Elephant',
+    },
+
+    ['Premium Safari Egg'] = {
+        'Oxpecker',
+        'Zebra',
+        'Giraffe',
+        'Rhino',
+        'Elephant',
+    },
+
+    ['Rainbow Premium Safari Egg'] = {
+        'Rainbow Oxpecker',
+        'Rainbow Zebra',
+        'Rainbow Giraffe',
+        'Rainbow Rhino',
+        'Rainbow Elephant',
+    },
+
+    ['Gem Egg'] = {
+        'Topaz Snail',
+        'Amethyst Beetle',
+        'Emerald Snake',
+        'Sapphire Macaw',
+        'Diamond Panther',
+        'Ruby Squid',
+    },
+
+    ['Christmas Egg'] = {
+        'Turtle Dove',
+        'Reindeer',
+        'Nutcracker',
+        'Yeti',
+        'Ice Golem',
+    },
+
+    ['Premium Christmas Egg'] = {
+        'Turtle Dove',
+        'Reindeer',
+        'Nutcracker',
+        'Yeti',
+        'Ice Golem',
+    },
+
+    ['Festive Premium Christmas Egg'] = {
+        'Festive Turtle Dove',
+        'Festive Reindeer',
+        'Festive Nutcracker',
+        'Festive Yeti',
+        'Festive Ice Golem',
+    },
+
+    ['Winter Egg'] = {
+        'Partridge',
+        'Santa Bear',
+        'Moose',
+        'Frost Squirrel',
+        'Wendigo',
+    },
+
+    ['Premium Winter Egg'] = {
+        'Partridge',
+        'Santa Bear',
+        'Moose',
+        'Frost Squirrel',
+        'Wendigo',
+    },
+
+    ['Festive Premium Winter Egg'] = {
+        'Festive Partridge',
+        'Festive Santa Bear',
+        'Festive Moose',
+        'Festive Frost Squirrel',
+        'Festive Wendigo',
+    },
+
+    ["New Year\\'s Egg"] = {
+        "New Year\\'s Bird",
+        'Firework Sprite',
+        'Celebration Puppy',
+        "New Year\\'s Chimp",
+        'Star Wolf',
+        "New Year\\'s Dragon",
+    },
+
+    ["Premium New Year\\'s Egg"] = {
+        "New Year\\'s Bird",
+        'Firework Sprite',
+        'Celebration Puppy',
+        "New Year\\'s Chimp",
+        'Star Wolf',
+        "New Year\\'s Dragon",
+    },
+
+    ["Rainbow Premium New Year\\'s Egg"] = {
+        "Rainbow New Year\\'s Bird",
+        'Rainbow Firework Sprite',
+        'Rainbow Celebration Puppy',
+        "Rainbow New Year\\'s Chimp",
+        'Rainbow Star Wolf',
+        "Rainbow New Year\\'s Dragon",
+    },
+
+    ['Carnival Egg'] = {
+        'Unicycle Monkey',
+        'Performer Seal',
+        'Bear on Bike',
+        'Show Pony',
+        'Carnival Elephant',
+    },
+
+    ['Premium Carnival Egg'] = {
+        'Unicycle Monkey',
+        'Performer Seal',
+        'Bear on Bike',
+        'Show Pony',
+        'Carnival Elephant',
+    },
+
+    ['Rainbow Premium Carnival Egg'] = {
+        'Rainbow Unicycle Monkey',
+        'Rainbow Performer Seal',
+        'Rainbow Bear on Bike',
+        'Rainbow Show Pony',
+        'Rainbow Carnival Elephant',
+    },
+
+    ['Lich Crystal'] = {
+        'Lich',
+    },
+
+    ['Golden Egg'] = {
+        'Chocolate Bunny',
+        'Easter Egg Chick',
+        'Marshmallow Lamb',
+        'Easter Bunny',
+    },
+
+    ['Gilded Choc Golden Egg'] = {
+        'Gilded Choc Chocolate Bunny',
+        'Gilded Choc Easter Egg Chick',
+        'Gilded Choc Marshmallow Lamb',
+        'Gilded Choc Easter Bunny',
+    },
+
+    ['Premium Golden Egg'] = {
+        'Chocolate Bunny',
+        'Easter Egg Chick',
+        'Marshmallow Lamb',
+        'Easter Bunny',
+    },
+
+    ['Gilded Choc Premium Golden Egg'] = {
+        'Gilded Choc Chocolate Bunny',
+        'Gilded Choc Easter Egg Chick',
+        'Gilded Choc Marshmallow Lamb',
+        'Gilded Choc Easter Bunny',
+    },
+
+    ['Springtide Egg'] = {
+        'Spring Bee',
+        'Jerboa',
+        'Nyala',
+        'Peryton',
+    },
+
+    ['Gilded Choc Springtide Egg'] = {
+        'Gilded Choc Spring Bee',
+        'Gilded Choc Jerboa',
+        'Gilded Choc Nyala',
+        'Gilded Choc Peryton',
+    },
+
+    ['Premium Springtide Egg'] = {
+        'Spring Bee',
+        'Jerboa',
+        'Nyala',
+        'Peryton',
+    },
+
+    ['Gilded Choc Premium Springtide Egg'] = {
+        'Gilded Choc Spring Bee',
+        'Gilded Choc Jerboa',
+        'Gilded Choc Nyala',
+        'Gilded Choc Peryton',
+    },
+
+    ['Hive Egg'] = {
+        'Bumblebee',
+        'Nurse Bee',
+        'Gardener Bee',
+        'Elemental Bee',
+        'Empress Bee',
+    },
+
+    ['Premium Hive Egg'] = {
+        'Bumblebee',
+        'Nurse Bee',
+        'Gardener Bee',
+        'Elemental Bee',
+        'Empress Bee',
+    },
+
+    ['Rainbow Premium Hive Egg'] = {
+        'Rainbow Bumblebee',
+        'Rainbow Nurse Bee',
+        'Rainbow Gardener Bee',
+        'Rainbow Elemental Bee',
+        'Rainbow Empress Bee',
+    },
+
+}
+
+return EggData
