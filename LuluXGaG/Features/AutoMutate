@@ -331,7 +331,7 @@ tabAM:Accordion("Pet Target", function(sec)
     local helperInfo = selNames.LVLv1 ~= ""
         and ("Helper Leveling: LV Lv1 [" .. selNames.LVLv1 .. "]")
         or  "Helper Leveling: LV Lv1 belum di-set!"
-    sec:TextLine(helperInfo)
+    sec:Label(helperInfo)
 end)
 
 -- ── Mutation Config ─────────────────────────────────────────
