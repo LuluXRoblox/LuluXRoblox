@@ -655,23 +655,7 @@ end
 -- ============================================================
 -- AUTO EGG — CORE
 -- ============================================================
-local function aeCountMyEggs()
-    local count = 0
-    pcall(function()
-        for _, farm in ipairs(workspace.Farm:GetChildren()) do
-            local objPhys = farm:FindFirstChild("Objects_Physical", true)
-            if not objPhys then continue end
-            for _, obj in ipairs(objPhys:GetChildren()) do
-                if obj:GetAttribute("OBJECT_TYPE") == "PetEgg"
-                and aeIsMyEgg(obj:GetAttribute("OWNER")) then
-                    count += 1
-                end
-            end
-        end
-    end)
-    return count
-end
-
+-- aeGetMyFarm harus di-define DULU karena dipakai aeCountMyEggs
 local function aeGetMyFarm()
     for _, farm in ipairs(workspace.Farm:GetChildren()) do
         if farm.Name == "Farm" then
@@ -680,6 +664,24 @@ local function aeGetMyFarm()
         end
     end
     return nil
+end
+
+-- Hitung egg di farm kita — tidak perlu cek OWNER per-egg
+-- (semua egg di farm kita = punya kita, jauh lebih robust)
+local function aeCountMyEggs()
+    local count = 0
+    pcall(function()
+        local myFarm = aeGetMyFarm()
+        if not myFarm then return end
+        local objPhys = myFarm:FindFirstChild("Objects_Physical", true)
+        if not objPhys then return end
+        for _, obj in ipairs(objPhys:GetChildren()) do
+            if obj:GetAttribute("OBJECT_TYPE") == "PetEgg" then
+                count += 1
+            end
+        end
+    end)
+    return count
 end
 
 local function aeFindEggTool(eggName)
@@ -874,12 +876,21 @@ local function startAutoEgg()
             end
 
             -- STEP 4: Wait for all eggs to be ready (max 5 min timeout)
-            local waitStart4 = tick()
+            -- Catatan: jangan break hanya karena curPlaced == 0 sekali saja
+            -- (bisa false-negative saat farm belum sync). Double-check dulu.
+            local waitStart4   = tick()
+            local zeroStreak   = 0          -- hitung berapa kali berturut-turut dapat 0
+            local ZERO_CONFIRM = 3          -- butuh 3x berturut-turut baru dianggap beneran kosong
             while AutoEgg.Running do
                 local curPlaced = aeCountMyEggs()
                 local readyNow  = aeGetReadyEggObjects()
                 if curPlaced > 0 and #readyNow >= curPlaced then break end
-                if curPlaced == 0 then break end
+                if curPlaced == 0 then
+                    zeroStreak += 1
+                    if zeroStreak >= ZERO_CONFIRM then break end  -- benar-benar kosong
+                else
+                    zeroStreak = 0  -- reset jika count kembali > 0
+                end
                 if tick() - waitStart4 > 300 then break end  -- 5 min max
                 task.wait(2)
             end
