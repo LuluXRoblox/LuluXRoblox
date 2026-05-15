@@ -1,0 +1,275 @@
+-- ============================================================
+-- LuluXGAG | Part 2: Services, State Tables, Remotes
+-- ============================================================
+-- ============================================================
+-- ============================================================
+local LuluUI = loadstring(game:HttpGet(
+    "https://raw.githubusercontent.com/ytlulu/LULUVUI/main/BETATEST2", true
+))()
+
+-- Load pet name list from PetData module (used for PnP dropdowns)
+local PetDataNames = {}
+pcall(function()
+    local pd = loadstring(game:HttpGet(
+        "https://raw.githubusercontent.com/LuluXRoblox/LuluXRoblox/refs/heads/main/PetData", true
+    ))()
+    if type(pd) == "table" and type(pd.All) == "table" then
+        PetDataNames = pd.All
+    end
+end)
+
+-- ============================================================
+-- SERVICES
+-- ============================================================
+local SCRIPT_VERSION    = "LuluXNotRelease"
+local Players           = game:GetService("Players")
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local HttpService       = game:GetService("HttpService")
+local LP                = Players.LocalPlayer
+local Backpack          = LP.Backpack
+local Workspace         = game:GetService("Workspace")
+local Lighting          = game:GetService("Lighting")
+local MaterialService   = game:GetService("MaterialService")
+local VirtualUser       = game:GetService("VirtualUser")
+
+local KALC_MULT     = 0.090909
+local kalcAge       = 1
+local kalcWeight    = 1
+local kalcShowRange = false
+
+local AUTOHIDE_TIMEOUT = 3
+local PRUNE_TIMEOUT    = 30
+
+-- ============================================================
+-- CONFIG PATHS  –  each AE slot now has its OWN config type
+-- ============================================================
+local POSSIBLE_PATHS = {
+    "/storage/emulated/0/Delta/Workspace/LuluXGaG/",
+    "/storage/emulated/0/Android/data/com.roblox.client/files/gloop/external/Workspace/LuluXGaG/",
+}
+
+local WORKSPACE_PATH
+for _, path in ipairs(POSSIBLE_PATHS) do
+    local testFile = path .. ".__test"
+    local ok = pcall(function()
+        if not isfolder(path) then makefolder(path) end
+        writefile(testFile, "ok")
+        readfile(testFile)
+    end)
+    pcall(function() delfile(testFile) end)
+    if ok then WORKSPACE_PATH = path; break end
+end
+
+local SETTINGS_PATH = WORKSPACE_PATH .. "LuluXGAG_Settings.json"
+
+-- ── about file (unchanged) ───────────────────────────────────
+if not isfile(WORKSPACE_PATH .. "AllTheLulu.txt") then
+    writefile(WORKSPACE_PATH .. "AllTheLulu.txt", "LuluXGAG - by Lulu_Attack\n")
+end
+
+local BASE_PATH = WORKSPACE_PATH .. "PetsData/"
+
+--[[ CONFIG_TYPES
+     IMPORTANT: "ae reduce time", "ae hatch egg", "ae good hatch", "ae selling"
+     are SEPARATE folders so each AutoEgg slot has its own pet lists,
+     completely independent from "custom loadout".
+]]
+local CONFIG_TYPES = {
+    "leveling lv 1",
+    "leveling lv 2",
+    "leveling kg 1",
+    "leveling kg 2",
+    "upgrading kg",
+    "custom loadout",
+    "ae reduce time",       -- AutoEgg reduce-time loadout
+    "ae hatch egg",         -- AutoEgg normal-hatch loadout
+    "ae good hatch",        -- AutoEgg good-hatch loadout
+    "ae selling",           -- AutoEgg selling loadout
+    "mutate reduce time",   -- AutoMutate: equip saat mesin jalan
+}
+
+-- ============================================================
+-- STATE TABLES
+-- ============================================================
+local State = {
+    AllPets           = {},
+    Alldisplay        = {},
+    EquippedUUIDs     = {},
+    BagUUIDs          = {},
+    UUIDToName        = {},
+    AllPetNames       = {},
+    DisplayToPet      = {},
+    UUIDToType        = {},
+    ShowInfo          = true,
+    DetailInfo        = true,
+    ShowProgress      = true,
+    ShowBlessing      = true,
+    ShowPnp           = true,
+    ShowAllProg       = true,
+    ShowBoost         = true,
+    AllProgLastStatus = "",
+    DisplayKGTarget   = {},
+    DisplayLVTarget   = {},
+    OthersLoadoutUUIDs = {},
+    Disable3D         = false,
+    SpeedEnabled      = false,
+    NoClipEnabled     = false,
+    UnliJumpEnabled   = false,
+    WalkSpeed         = 25,
+}
+
+local KG = {
+    Running      = false, Thread       = nil,  Targets    = {},
+    Many         = 1,     Lv1          = {},    Lv2        = {},
+    UpKG         = {},    TargetBase   = 0,     Status     = {},
+    ActivePhases = {},    DoneUUIDs    = {},    FaseCount  = {},
+    ByStep       = false, AllDone      = false, CompletedNaturally = false,
+    LastKnown    = {},    LastKnownAge = {},    CurrentKG  = {},
+    Bridge       = false, Session      = 0,
+}
+
+local LV = {
+    Running       = false, Thread        = nil,  Targets       = {},
+    ManualTargets = {},    Many          = 1,     Lv1           = {},
+    Lv2           = {},    Status        = {},    DoneUUIDs     = {},
+    TargetAge     = 100,   AllDone       = false,
+}
+
+local PnP = {
+    Running           = false, CDConn          = nil,
+    DelayPick         = 3,     DelayPlace      = 0.3,
+    Sync              = false, SyncPaused      = false,
+    Processing        = {},    Status          = {},
+    LabelOrder        = {},    LabelSet        = {},
+    OnSkillPets       = {},    OnSkillUUIDs    = {},
+    AfterSkillPets    = {},    AfterSkillUUIDs = {},
+    UUIDCache         = {},    -- { [petName] = { [uuid] = true } } — persistent, hanya grows
+    PrevCD            = {},    LastSeen        = {},
+    ActiveHelperUUIDs = {},  ClearLoading      = false,
+}
+
+local boost = {
+    Running       = false, Thread        = nil,
+    ScanMap       = {},    Displays      = {},    Selected      = {},
+    ToyMode       = "Small", SavedUUIDs  = {},
+    DelayMin      = 1,
+    MonitorUUID   = nil,   SmallPending  = false, MediumPending = false,
+    Monitors      = {},    -- { [uuid] = { small=nil, medium=nil } }  1 per pet
+}
+
+local Webhook = { Url = "", KG = false, LV = false }
+
+local Lag = {
+    Spider     = false, Pets       = false, Spotted    = false,
+    SpiderConn = nil,   PetsConn   = nil,   SpottedCon = nil,
+    HideFruits = false, HidePlants = false,
+}
+
+local AutoEgg = {
+    Running          = false, Thread           = nil,
+    -- UUID lists per slot (populated from their own config types)
+    ReduceTimeUUIDs  = {},
+    HatchEggUUIDs    = {},
+    GoodHatchUUIDs   = {},
+    SellingUUIDs     = {},
+    MaxPlace         = 1,     MinGoodHatch     = 0,
+    ChosenEggs       = {},    SellPets         = {},
+    GoodHatchPets    = {},    -- pet names yang selalu good hatch terlepas dari berat
+    MaxWeightSell    = 5.0,
+}
+
+-- uuid → { petName, baseWeight, weightMin, weightMax, hugeChance,
+--          canHatch, timeToHatch, readyNotified }
+local HatchMonitor = {}
+
+local EggData_Cached   = nil
+local RAW_EGG_DATA_URL = "https://raw.githubusercontent.com/LuluXRoblox/LuluXRoblox/refs/heads/main/EggData"
+local EGG_DATA_CACHE_PATH
+
+local function loadEggDataCached()
+    EGG_DATA_CACHE_PATH = WORKSPACE_PATH .. "EggData_v1.lua"
+    pcall(function()
+        if isfile and isfile(EGG_DATA_CACHE_PATH) then
+            local fn = loadstring(readfile(EGG_DATA_CACHE_PATH))
+            if fn then
+                local ok, result = pcall(fn)
+                if ok and type(result) == "table" then EggData_Cached = result; return end
+            end
+        end
+    end)
+    if EggData_Cached then return end
+    pcall(function()
+        local ok, raw = pcall(game.HttpGet, game, RAW_EGG_DATA_URL, true)
+        if ok and raw and raw ~= "" then
+            pcall(function() writefile(EGG_DATA_CACHE_PATH, raw) end)
+            local fn = loadstring(raw)
+            if fn then
+                local ok2, result = pcall(fn)
+                if ok2 and type(result) == "table" then EggData_Cached = result end
+            end
+        end
+    end)
+end
+
+local function getEggNamesList()
+    if not EggData_Cached then return {} end
+    local names = {}
+    for name in pairs(EggData_Cached) do table.insert(names, name) end
+    table.sort(names); return names
+end
+
+local function getAllEggPetNames()
+    if not EggData_Cached then return {} end
+    local seen, names = {}, {}
+    for _, pets in pairs(EggData_Cached) do
+        for _, petName in ipairs(pets) do
+            if not seen[petName] then seen[petName] = true; table.insert(names, petName) end
+        end
+    end
+    table.sort(names); return names
+end
+
+local function getEggPetNamesForChosen()
+    if not EggData_Cached then return {} end
+    if #AutoEgg.ChosenEggs == 0 then return getAllEggPetNames() end
+    local seen, names = {}, {}
+    for _, eggName in ipairs(AutoEgg.ChosenEggs) do
+        local pets = EggData_Cached[eggName]
+        if pets then
+            for _, petName in ipairs(pets) do
+                if not seen[petName] then seen[petName] = true; table.insert(names, petName) end
+            end
+        end
+    end
+    table.sort(names); return names
+end
+
+local Jmb = {
+    Blessings      = {}, FiredPerHelper = {}, LabelOrder = {},
+    LabelSet       = {}, LastSeen       = {},
+}
+
+-- ============================================================
+-- REMOTES
+-- ============================================================
+local PetsService         = ReplicatedStorage.GameEvents.PetsService
+local PetCooldownsUpdated = ReplicatedStorage.GameEvents.PetCooldownsUpdated
+
+local function unequipPet(uuid) PetsService:FireServer("UnequipPet", uuid) end
+local function equipPet(uuid)   PetsService:FireServer("EquipPet",   uuid) end
+
+-- Dropdown handles
+local ddKG   = {}
+local ddLV   = {}
+local ddMisc = {}
+local ddAE   = {}   -- ddAE.ReduceTime / HatchEgg / GoodHatch / Selling / SellPets / Choose
+local tgl    = {}
+
+-- V7: config selection names (restored on restart)
+local selNames = {
+    KGLv1    = "", KGLv2    = "", KGUpKG  = "",
+    LVLv1    = "", LVLv2    = "",
+    -- AE slots now use their own config types
+    AEReduce = "", AEHatch  = "", AEGood  = "", AESell = "",
+    Other    = "",
+}
