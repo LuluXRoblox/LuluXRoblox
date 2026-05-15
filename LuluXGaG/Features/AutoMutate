@@ -297,7 +297,7 @@ end
 -- ============================================================
 -- UI TAB
 -- ============================================================
-local tabAM = win:Tab("🧬 Auto Mutate")
+local tabAM = win:Tab("Auto Mutate")
 
 -- ── Pet Target ──────────────────────────────────────────────
 tabAM:Accordion("Pet Target", function(sec)
@@ -310,8 +310,8 @@ tabAM:Accordion("Pet Target", function(sec)
     end
     table.sort(petNames)
 
-    local ddPet = sec:Dropdown("Chose Pets", petNames, function(val)
-        AutoMutate.targetPetName = val
+    local ddPet = sec:Dropdown("Chose Pets", petNames, "", function(val)
+    AutoMutate.targetPetName = val
     end)
 
     -- Rescan tombol
@@ -337,7 +337,7 @@ end)
 -- ── Mutation Config ─────────────────────────────────────────
 tabAM:Accordion("Mutation Config", function(sec)
     -- Target mutation dropdown
-    sec:Dropdown("Target Mutation", MUTATIONS, function(val)
+    sec:Dropdown("Target Mutation", MUTATIONS, MUTATIONS[1] or "", function(val)
         AutoMutate.targetMutation = val
     end)
 
