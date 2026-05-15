@@ -129,18 +129,35 @@ local function clickConfirm()
     return false
 end
 
--- Tunggu timer mesin = 0 / ready
+-- Tunggu timer mesin selesai — dua fase:
+--   Fase 1: tunggu timer punya isi (pet baru masuk mesin)
+--   Fase 2: tunggu timer habis / ready (mutasi selesai)
 local function waitTimerReady(timeout)
     timeout = timeout or 300
-    local t = 0
-    while t < timeout and AutoMutate.running do
+
+    -- Fase 1: tunggu sampai timer ada isinya (mesin mulai jalan)
+    local t1 = 0
+    local FILL_TIMEOUT = 15  -- maks 15 detik nunggu timer muncul
+    while t1 < FILL_TIMEOUT and AutoMutate.running do
+        local txt = timerLabel and timerLabel.Text or ""
+        if txt ~= "" then break end  -- timer sudah ada isi → lanjut fase 2
+        task.wait(0.5)
+        t1 = t1 + 0.5
+    end
+
+    if not AutoMutate.running then return false end
+
+    -- Fase 2: tunggu sampai timer kosong / 0 / ready (mutasi selesai)
+    local t2 = 0
+    while t2 < timeout and AutoMutate.running do
         local txt = timerLabel and timerLabel.Text or ""
         if txt == "" or txt == "0" or txt == "0s" or txt:lower() == "ready" then
             return true
         end
         task.wait(1)
-        t = t + 1
+        t2 = t2 + 1
     end
+
     return false
 end
 
