@@ -10,6 +10,7 @@ local State          = G.State
 local selNames       = G.selNames
 local pet            = G.pet
 local getConfigUUIDs = G.getConfigUUIDs
+local getConfigsByType = G.getConfigsByType
 
 -- ============================================================
 -- MUTATION LIST  –  isi sesuai game nanti
@@ -22,13 +23,15 @@ local MUTATIONS = {
 -- STATE
 -- ============================================================
 local AutoMutate = {
-    running        = false,
-    thread         = nil,
-    targetPetName  = "",
-    targetMutation = "Rainbow",
-    reduceTime     = false,
-    multiCount     = 1,
-    doneCount      = 0,
+    running          = false,
+    thread           = nil,
+    targetPetName    = "",
+    targetMutation   = "Rainbow",
+    reduceTime       = false,
+    multiCount       = 1,
+    doneCount        = 0,
+    helperConfigName = selNames.MutateHelper or "",
+    reduceConfigName = selNames.MutateReduce or "",
 }
 
 -- ============================================================
@@ -47,10 +50,18 @@ local proxPrompt, timerLabel
 
 local function initRefs()
     local ok = pcall(function()
-        proxPrompt = workspace.NPCS.PetMutationMachine
-            .Model.ProxPromptPart.PetMutationMachineProximityPrompt
-        timerLabel = workspace.NPCS.PetMutationMachine
-            .Model.Part.BillboardPart.BillboardGui.TimerTextLabel
+        local npcs    = workspace:WaitForChild("NPCS", 15)
+        local machine = npcs:WaitForChild("PetMutationMachine", 15)
+        local model   = machine:WaitForChild("Model", 15)
+
+        local proxPart = model:WaitForChild("ProxPromptPart", 15)
+        proxPrompt = proxPart:WaitForChild("PetMutationMachineProximityPrompt", 15)
+
+        local billPart = model:WaitForChild("Part", 15)
+        timerLabel = billPart
+            :WaitForChild("BillboardPart", 15)
+            :WaitForChild("BillboardGui", 15)
+            :WaitForChild("TimerTextLabel", 15)
     end)
     return ok
 end
@@ -133,13 +144,18 @@ local function waitTimerReady(timeout)
     return false
 end
 
--- Load reduce-time loadout (config type: "mutate reduce time", file: "default")
+-- Load reduce-time loadout (config type: "mutate reduce time", file: selected by user)
 local function loadReduceLoadout()
-    local uuids = getConfigUUIDs("mutate reduce time", "default")
+    local configName = AutoMutate.reduceConfigName
+    if configName == "" then
+        win:luluNotify("Reduce Time: belum pilih config di Mutation Config!", "warn")
+        return
+    end
+    local uuids = getConfigUUIDs("mutate reduce time", configName)
     if #uuids > 0 then
         pet.equipList(uuids)
     else
-        win:luluNotify("Reduce Time: config 'default' kosong!", "warn")
+        win:luluNotify("Reduce Time: config '" .. configName .. "' kosong!", "warn")
     end
 end
 
@@ -212,13 +228,13 @@ local function autoMutateLoop()
     win:luluNotify("AutoMutate dimulai...", "info")
     AutoMutate.doneCount = 0
 
-    -- Ambil UUIDs helper leveling dari config LV Lv1
+    -- Ambil UUIDs helper leveling dari config "mutate helper lv"
     local helperUUIDs = {}
-    if selNames.LVLv1 ~= "" then
-        helperUUIDs = getConfigUUIDs("leveling lv 1", selNames.LVLv1)
+    if AutoMutate.helperConfigName ~= "" then
+        helperUUIDs = getConfigUUIDs("mutate helper lv", AutoMutate.helperConfigName)
     end
     if #helperUUIDs == 0 then
-        win:luluNotify("AutoMutate: LV Lv1 kosong, leveling tanpa helper!", "warn")
+        win:luluNotify("AutoMutate: Helper kosong, leveling tanpa helper!", "warn")
     end
 
     local needed = AutoMutate.multiCount
@@ -327,11 +343,24 @@ tabAM:Accordion("Pet Target", function(sec)
         win:luluNotify("Rescanned!", "success")
     end)
 
-    -- Info: helper leveling dari LV Lv1
-    local helperInfo = selNames.LVLv1 ~= ""
-        and ("Helper Leveling: LV Lv1 [" .. selNames.LVLv1 .. "]")
-        or  "Helper Leveling: LV Lv1 belum di-set!"
-    sec:Label(helperInfo)
+    -- ── Helper Leveling (config terpisah: "mutate helper lv") ────
+    local helperOptions = getConfigsByType and getConfigsByType("mutate helper lv") or {}
+
+    local ddHelper = sec:Dropdown(
+        "Helper Leveling",
+        helperOptions,
+        AutoMutate.helperConfigName,
+        function(val)
+            AutoMutate.helperConfigName = val
+            selNames.MutateHelper       = val
+        end
+    )
+
+    sec:Button("Refresh Helper Config", function()
+        local opts = getConfigsByType and getConfigsByType("mutate helper lv") or {}
+        pcall(function() if ddHelper and ddHelper.SetOptions then ddHelper:SetOptions(opts) end end)
+        win:luluNotify("Helper config list refreshed!", "info")
+    end)
 end)
 
 -- ── Mutation Config ─────────────────────────────────────────
@@ -341,18 +370,37 @@ tabAM:Accordion("Mutation Config", function(sec)
         AutoMutate.targetMutation = val
     end)
 
-    -- Reduce Time toggle (pakai config "mutate reduce time" → file "default")
+    -- Reduce Time toggle
     sec:Toggle("Reduce Time", false, function(val)
         AutoMutate.reduceTime = val
         if val then
             win:luluNotify(
-                "Reduce Time ON — pastikan ada config 'default' di mutate reduce time",
+                "Reduce Time ON — pastikan sudah pilih config di bawah",
                 "info"
             )
         end
     end)
 
-    -- FIX: Multi leveling 1–7 (default=1, step=1, min=1, max=7)
+    -- Dropdown: pilih config "mutate reduce time" yang mau dipakai
+    local reduceOptions = getConfigsByType and getConfigsByType("mutate reduce time") or {}
+
+    local ddReduce = sec:Dropdown(
+        "Reduce Mutation Config",
+        reduceOptions,
+        AutoMutate.reduceConfigName,
+        function(val)
+            AutoMutate.reduceConfigName = val
+            selNames.MutateReduce       = val
+        end
+    )
+
+    sec:Button("Refresh Reduce Config", function()
+        local opts = getConfigsByType and getConfigsByType("mutate reduce time") or {}
+        pcall(function() if ddReduce and ddReduce.SetOptions then ddReduce:SetOptions(opts) end end)
+        win:luluNotify("Reduce config list refreshed!", "info")
+    end)
+
+    -- Multi leveling 1–7
     sec:NumberInput("Multi Leveling", 1, 1, 1, 7, function(val)
         AutoMutate.multiCount = math.floor(val)
     end)
