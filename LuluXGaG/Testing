@@ -1,48 +1,38 @@
--- auto_reconnect.lua
--- unlimited reconnect + unlimited reexecute
-
 repeat task.wait() until game:IsLoaded()
+
+task.wait(3)
 
 print("Auto reconnect&rejoin has ready")
 
-local Players = game:GetService("Players")
 local TeleportService = game:GetService("TeleportService")
 local CoreGui = game:GetService("CoreGui")
 
-local player = Players.LocalPlayer
-local placeId = game.PlaceId
+local PLACE_ID = game.PlaceId
+
+local SELF_URL = "https://raw.githubusercontent.com/LuluXRoblox/LuluXRoblox/refs/heads/main/LuluXGaG/Testing"
 
 -- ============================================================
--- URL SCRIPT INI SENDIRI
--- upload file ini ke github/raw lalu isi url nya
+-- PASANG QUEUE SETIAP EXECUTE
 -- ============================================================
 
-getgenv().AUTO_RECONNECT_FILE = "https://raw.githubusercontent.com/LuluXRoblox/LuluXRoblox/refs/heads/main/LuluXGaG/Testing"
-
--- ============================================================
--- PASANG AUTO EXECUTE ULANG
--- ============================================================
-
-local queueCode = [[
-
+local queueScript = string.format([[
 repeat task.wait() until game:IsLoaded()
 
-task.wait(8)
+task.wait(5)
 
 print("Auto reconnect succes✓")
 
-loadstring(game:HttpGet("]] .. getgenv().AUTO_RECONNECT_FILE .. [[", true))()
-
-]]
+loadstring(game:HttpGet("%s", true))()
+]], SELF_URL)
 
 if queue_on_teleport then
-    queue_on_teleport(queueCode)
+    queue_on_teleport(queueScript)
 elseif syn and syn.queue_on_teleport then
-    syn.queue_on_teleport(queueCode)
+    syn.queue_on_teleport(queueScript)
 end
 
 -- ============================================================
--- EXECUTE LOADER
+-- MAIN LOADER
 -- ============================================================
 
 task.spawn(function()
@@ -76,18 +66,13 @@ task.spawn(function()
     local fn, err = loadstring(combined)
 
     if not fn then
-        warn("[LuluXGAG] Compile failed")
         warn(err)
         return
     end
 
-    local success, runtimeErr = pcall(fn)
+    fn()
 
-    if success then
-        print("Auto execute succes✓")
-    else
-        warn(runtimeErr)
-    end
+    print("Auto reexecute succes✓")
 
 end)
 
@@ -101,7 +86,7 @@ CoreGui.RobloxPromptGui.promptOverlay.ChildAdded:Connect(function(v)
 
         task.wait(2)
 
-        TeleportService:Teleport(placeId)
+        TeleportService:Teleport(PLACE_ID)
 
     end
 end)
