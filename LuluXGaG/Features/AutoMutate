@@ -315,7 +315,7 @@ tabAM:Accordion("Pet Target", function(sec)
     end)
 
     -- Rescan tombol
-    sec:Button("🔄 Rescan Backpack", function()
+    sec:Button("Rescan Backpack", function()
         pet.scanAll()
         task.wait(0.3)
         local fresh = {}
@@ -353,7 +353,7 @@ tabAM:Accordion("Mutation Config", function(sec)
     end)
 
     -- Multi leveling 1–7 (berapa pet yang mau dimutasi per sesi)
-    sec:Slider("Multi Leveling", 1, 7, 1, function(val)
+    sec:NumberInput("Multi Leveling", 1, 7, 1, function(val)
         AutoMutate.multiCount = math.floor(val)
     end)
 end)
