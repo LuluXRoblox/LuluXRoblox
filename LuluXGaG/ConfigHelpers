@@ -1,0 +1,95 @@
+-- ============================================================
+-- LuluXGAG | Part 3: Config File Helpers + Name Parse
+-- ============================================================
+-- ============================================================
+-- ============================================================
+-- ============================================================
+-- CONFIG FILE HELPERS
+-- ============================================================
+local function typeToFolder(configType)
+    return BASE_PATH .. configType:lower() .. "/"
+end
+
+local function ensureFolders()
+    pcall(function()
+        if type(makefolder) ~= "function" then return end
+        makefolder(WORKSPACE_PATH)
+        makefolder(BASE_PATH)
+        for _, t in ipairs(CONFIG_TYPES) do makefolder(typeToFolder(t)) end
+    end)
+end
+
+local function saveNamedConfig(configType, name, uuids)
+    if name == "" then return false, "Name cannot be empty" end
+    if type(writefile) ~= "function" then return false, "writefile not available" end
+    local ok, err = pcall(function()
+        writefile(typeToFolder(configType) .. name .. ".json", HttpService:JSONEncode(uuids))
+    end)
+    return ok, (err or "")
+end
+
+local function deleteNamedConfig(configType, name)
+    if type(delfile) ~= "function" then return false, "delfile not available" end
+    local ok, err = pcall(function() delfile(typeToFolder(configType) .. name .. ".json") end)
+    return ok, (err or "")
+end
+
+local function getConfigsByType(configType)
+    local names = {}
+    pcall(function()
+        if type(listfiles) ~= "function" then return end
+        for _, fullPath in ipairs(listfiles(typeToFolder(configType))) do
+            local filename = fullPath:match("([^/\\]+)$") or fullPath
+            local name     = filename:match("^(.+)%.json$") or filename
+            table.insert(names, name)
+        end
+        table.sort(names)
+    end)
+    return names
+end
+
+local function getConfigUUIDs(configType, name)
+    local uuids = {}
+    pcall(function()
+        if type(readfile) ~= "function" then return end
+        local path = typeToFolder(configType) .. name .. ".json"
+        if type(isfile) == "function" and not isfile(path) then return end
+        local ok, data = pcall(function() return HttpService:JSONDecode(readfile(path)) end)
+        if ok and type(data) == "table" then uuids = data end
+    end)
+    return uuids
+end
+
+local function getAllConfigEntries()
+    local entries = {}
+    pcall(function()
+        if type(listfiles) ~= "function" then return end
+        for _, t in ipairs(CONFIG_TYPES) do
+            local folder = typeToFolder(t)
+            for _, fullPath in ipairs(listfiles(folder)) do
+                local filename = fullPath:match("([^/\\]+)$") or fullPath
+                local name     = filename:match("^(.+)%.json$") or filename
+                table.insert(entries, t .. " : " .. name)
+            end
+        end
+        table.sort(entries)
+    end)
+    return entries
+end
+
+-- ============================================================
+-- NAME PARSE HELPERS
+-- ============================================================
+local function parseName(itemName)
+    local kg  = itemName:match("%[(%d+%.%d+) KG%]")
+    local age = itemName:match("%[Age (%d+)%]")
+    local base = itemName:match("^(.-)%s*%[") or itemName
+    return { base = base:match("^%s*(.-)%s*$"), kg = kg, age = age }
+end
+
+local function buildDisplay(petName, kg, age)
+    local s = petName
+    if kg  then s = s .. " [" .. kg  .. " KG]"  end
+    if age then s = s .. " [Age " .. age .. "]" end
+    return s
+end
