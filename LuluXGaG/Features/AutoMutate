@@ -311,7 +311,7 @@ tabAM:Accordion("Pet Target", function(sec)
     table.sort(petNames)
 
     local ddPet = sec:Dropdown("Chose Pets", petNames, "", function(val)
-    AutoMutate.targetPetName = val
+        AutoMutate.targetPetName = val
     end)
 
     -- Rescan tombol
@@ -352,8 +352,8 @@ tabAM:Accordion("Mutation Config", function(sec)
         end
     end)
 
-    -- Multi leveling 1–7 (berapa pet yang mau dimutasi per sesi)
-    sec:NumberInput("Multi Leveling", 1, 7, 1, function(val)
+    -- FIX: Multi leveling 1–7 (default=1, step=1, min=1, max=7)
+    sec:NumberInput("Multi Leveling", 1, 1, 1, 7, function(val)
         AutoMutate.multiCount = math.floor(val)
     end)
 end)
