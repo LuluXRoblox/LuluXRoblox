@@ -38,6 +38,8 @@ local function saveSettings()
         SelAEReduce = selNames.AEReduce, SelAEHatch  = selNames.AEHatch,
         SelAEGood   = selNames.AEGood,   SelAESell   = selNames.AESell,
         SelOther    = selNames.Other,
+        -- AutoMutate slots
+        SelMutateHelper = selNames.MutateHelper, SelMutateReduce = selNames.MutateReduce,
         -- AutoEgg settings
         AEMaxPlace      = AutoEgg.MaxPlace,     AEMinGoodHatch  = AutoEgg.MinGoodHatch,
         AEMaxWeightSell = AutoEgg.MaxWeightSell, AEChosenEggs   = AutoEgg.ChosenEggs,
@@ -93,6 +95,9 @@ local function loadSettings()
         if s.SelAEGood  and s.SelAEGood   ~= "" then selNames.AEGood   = s.SelAEGood   end
         if s.SelAESell  and s.SelAESell   ~= "" then selNames.AESell   = s.SelAESell   end
         if s.SelOther   and s.SelOther    ~= "" then selNames.Other    = s.SelOther    end
+        -- AutoMutate
+        if s.SelMutateHelper and s.SelMutateHelper ~= "" then selNames.MutateHelper = s.SelMutateHelper end
+        if s.SelMutateReduce and s.SelMutateReduce ~= "" then selNames.MutateReduce = s.SelMutateReduce end
         -- AutoEgg
         if s.AEMaxPlace      then AutoEgg.MaxPlace      = s.AEMaxPlace      end
         if s.AEMinGoodHatch  then AutoEgg.MinGoodHatch  = s.AEMinGoodHatch  end
