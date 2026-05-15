@@ -16,7 +16,18 @@ local getConfigsByType = G.getConfigsByType
 -- MUTATION LIST  –  isi sesuai game nanti
 -- ============================================================
 local MUTATIONS = {
+    "Shocked",
+    "Golden",
     "Rainbow",
+    "Shiny",
+    "Windy",
+    "Frozen",
+    "Inverted",
+    "Mega",
+    "Tiny",
+    "Radiant",
+    "Ascended",
+    "Aurora",
 }
 
 -- ============================================================
@@ -208,31 +219,59 @@ local function loadReduceLoadout()
     end
 end
 
--- ============================================================
--- CORE: proses 1 pet ke mesin mutasi
--- ============================================================
+-- Pegang pet di tangan karakter (bukan equip ke garden)
+-- Sama seperti AutoEgg sell from hand: cari Tool di Backpack lalu hum:EquipTool
+local function holdPetInHand(petUUID)
+    local ch  = LP.Character
+    local hum = ch and ch:FindFirstChildOfClass("Humanoid")
+    if not ch or not hum then
+        warn("[AutoMutate] holdPetInHand: Character/Humanoid tidak ditemukan!")
+        return false
+    end
+    -- Cari Tool di Backpack berdasarkan UUID
+    local tool = nil
+    for _, item in ipairs(Backpack:GetChildren()) do
+        if item:IsA("Tool") then
+            local u = item:GetAttribute("PET_UUID") or item.Name
+            if u == petUUID then tool = item; break end
+        end
+    end
+    if not tool then
+        warn("[AutoMutate] holdPetInHand: Tool UUID " .. petUUID .. " tidak ada di Backpack!")
+        return false
+    end
+    pcall(function() hum:EquipTool(tool) end)
+    return true
+end
+
+
 local function processMutation(petUUID)
-    -- 1. Unequip semua
+    -- 1. Unequip semua dari garden
     pet.unequipAllActive()
     task.wait(0.5)
 
-    -- 2. Equip hanya target pet
-    pet.equipList({ petUUID })
+    -- 2. PEGANG pet target di tangan (bukan equip ke garden!)
+    --    hum:EquipTool → sama seperti AutoEgg sell from hand
+    local held = holdPetInHand(petUUID)
+    if not held then
+        win:luluNotify("AutoMutate: Gagal pegang pet!", "error")
+        return false, ""
+    end
     task.wait(1)
 
-    -- 3. Prompt mesin (buka UI)
+    -- 3. Prompt mesin → buka UI mesin mutasi
     fireproximityprompt(proxPrompt)
     task.wait(3)
 
-    -- 4. Klik konfirmasi
+    -- 4. Konfirmasi → pet masuk mesin
     clickConfirm()
     task.wait(0.5)
 
-    -- 5. Prompt mesin kedua (submit pet)
+    -- 5. Prompt mesin kedua → tutup/submit UI
     fireproximityprompt(proxPrompt)
     task.wait(1)
 
-    -- 6. Mesin jalan → load reduce time (jika config sudah dipilih)
+    -- 6. Pet sudah di mesin → equip helper reduce time ke garden
     if AutoMutate.reduceConfigName ~= "" then
         loadReduceLoadout()
     end
@@ -244,19 +283,20 @@ local function processMutation(petUUID)
         return false, ""
     end
 
-    -- 8. Unequip reduce time, balik ke target aja
+    -- 8. Unequip reduce time helpers
     pet.unequipAllActive()
     task.wait(0.5)
-    pet.equipList({ petUUID })
-    task.wait(1)
 
-    -- 9. Prompt untuk ambil hasil
+    -- 9. Prompt mesin → ambil pet hasil mutasi
+    --    (tidak perlu hold dulu, pet ada di mesin)
     fireproximityprompt(proxPrompt)
     task.wait(3)
+
+    -- 10. Konfirmasi → claim pet yang sudah dimutasi
     clickConfirm()
     task.wait(2)
 
-    -- 10. Cek nama baru berdasarkan UUID
+    -- 11. Scan ulang untuk cek nama baru
     pet.scanAll()
     task.wait(0.5)
 
