@@ -17,7 +17,7 @@ local placeId = game.PlaceId
 -- upload file ini ke github/raw lalu isi url nya
 -- ============================================================
 
-getgenv().AUTO_RECONNECT_FILE = "https://raw.githubusercontent.com/LuluXRoblox/LuluXRoblox/main/auto_reconnect.lua"
+getgenv().AUTO_RECONNECT_FILE = "https://raw.githubusercontent.com/LuluXRoblox/LuluXRoblox/refs/heads/main/LuluXGaG/Testing"
 
 -- ============================================================
 -- PASANG AUTO EXECUTE ULANG
