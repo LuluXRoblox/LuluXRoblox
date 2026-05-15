@@ -21,7 +21,7 @@ end)
 -- ============================================================
 -- SERVICES
 -- ============================================================
-local SCRIPT_VERSION    = "LuluXNotRelease"
+local SCRIPT_VERSION    = "LuluXZeaxyy-V8"
 local Players           = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local HttpService       = game:GetService("HttpService")
@@ -86,6 +86,7 @@ local CONFIG_TYPES = {
     "ae good hatch",        -- AutoEgg good-hatch loadout
     "ae selling",           -- AutoEgg selling loadout
     "mutate reduce time",   -- AutoMutate: equip saat mesin jalan
+    "mutate helper lv",     -- AutoMutate: helper leveling sebelum mutasi
 }
 
 -- ============================================================
@@ -272,4 +273,6 @@ local selNames = {
     -- AE slots now use their own config types
     AEReduce = "", AEHatch  = "", AEGood  = "", AESell = "",
     Other    = "",
+    -- AutoMutate slots
+    MutateHelper = "", MutateReduce = "",
 }
