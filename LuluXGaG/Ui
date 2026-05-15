@@ -982,6 +982,7 @@ task.defer(function()
         {selNames.LVLv1,"LV Lv1"},{selNames.LVLv2,"LV Lv2"},
         {selNames.AEReduce,"AE Reduce"},{selNames.AEHatch,"AE Hatch"},
         {selNames.AEGood,"AE Good"},{selNames.AESell,"AE Sell"},
+        {selNames.MutateHelper,"AM Helper"},{selNames.MutateReduce,"AM Reduce"},
         {selNames.Other,"Other"},
     }) do
         if pair[1] ~= "" then count=count+1; table.insert(restored, pair[2]) end
@@ -1006,6 +1007,7 @@ _G.LGAG = {
     HttpService    = game:GetService("HttpService"),
     pet            = PetAPI,   -- dari 04_pet_helpers.lua
     getConfigUUIDs = getConfigUUIDs,
+    getConfigsByType = getConfigsByType,
 }
 
 -- Load feature files dari GitHub (non-blocking)
