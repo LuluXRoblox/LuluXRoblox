@@ -1,0 +1,381 @@
+-- ============================================================
+-- LuluXGAG | Feature: Auto Mutated Pets
+-- Upload ke: ytlulu/LULUVUI → features/AutoMutate
+-- Requires _G.LGAG (di-set di 06_ui.lua)
+-- ============================================================
+
+local G              = _G.LGAG
+local win            = G.win
+local State          = G.State
+local selNames       = G.selNames
+local pet            = G.pet
+local getConfigUUIDs = G.getConfigUUIDs
+
+-- ============================================================
+-- MUTATION LIST  –  isi sesuai game nanti
+-- ============================================================
+local MUTATIONS = {
+    "Rainbow",
+}
+
+-- ============================================================
+-- STATE
+-- ============================================================
+local AutoMutate = {
+    running        = false,
+    thread         = nil,
+    targetPetName  = "",
+    targetMutation = "Rainbow",
+    reduceTime     = false,
+    multiCount     = 1,
+    doneCount      = 0,
+}
+
+-- ============================================================
+-- SERVICES (lokal, ga perlu dari _G)
+-- ============================================================
+local Players    = game:GetService("Players")
+local GuiService = game:GetService("GuiService")
+local VIM        = game:GetService("VirtualInputManager")
+local LP         = Players.LocalPlayer
+local Backpack   = LP.Backpack
+
+-- ============================================================
+-- MACHINE REFS
+-- ============================================================
+local proxPrompt, timerLabel
+
+local function initRefs()
+    local ok = pcall(function()
+        proxPrompt = workspace.NPCS.PetMutationMachine
+            .Model.ProxPromptPart.PetMutationMachineProximityPrompt
+        timerLabel = workspace.NPCS.PetMutationMachine
+            .Model.Part.BillboardPart.BillboardGui.TimerTextLabel
+    end)
+    return ok
+end
+
+-- ============================================================
+-- HELPERS
+-- ============================================================
+
+-- Cari semua pet di backpack berdasarkan nama display
+local function findAllPetsByName(displayName)
+    local result = {}
+    for _, p in ipairs(State.AllPets or {}) do
+        if p.name == displayName then
+            table.insert(result, p)
+        end
+    end
+    return result
+end
+
+-- Ambil nama terbaru pet berdasarkan UUID (dari Backpack instance)
+local function getPetNameByUUID(targetUUID)
+    for _, item in ipairs(Backpack:GetChildren()) do
+        local ok, name = pcall(function()
+            local uuid = item:GetAttribute("PET_UUID") or item.Name
+            if uuid == targetUUID then
+                return item:GetAttribute("f") or ""
+            end
+        end)
+        if ok and type(name) == "string" and name ~= "" then
+            return name
+        end
+    end
+    return nil
+end
+
+-- Ekstrak mutasi: "Rainbow Seal", base "Seal" → "Rainbow"
+local function extractMutation(fullName, baseName)
+    if fullName == baseName then return "" end
+    local suffix = " " .. baseName
+    if fullName:sub(-#suffix) == suffix then
+        return fullName:sub(1, #fullName - #suffix):match("^%s*(.-)%s*$") or ""
+    end
+    return ""
+end
+
+-- Klik tombol konfirmasi di GenericConfirmationPrompt (retry max 5x)
+local function clickConfirm()
+    for _ = 1, 5 do
+        local ok = pcall(function()
+            local prompt = LP.PlayerGui:FindFirstChild("GenericConfirmationPrompt")
+            if not prompt then error("no prompt") end
+            local btn   = prompt.Main.Buttons.Confirm
+            local inset = GuiService:GetGuiInset()
+            local pos   = btn.AbsolutePosition + btn.AbsoluteSize / 2
+            local cx    = pos.X + inset.X + 15
+            local cy    = pos.Y + inset.Y
+            VIM:SendMouseButtonEvent(cx, cy, 0, true,  game, 1)
+            task.wait(0.1)
+            VIM:SendMouseButtonEvent(cx, cy, 0, false, game, 1)
+        end)
+        if ok then return true end
+        task.wait(0.5)
+    end
+    warn("[AutoMutate] clickConfirm: prompt tidak muncul setelah 5x retry")
+    return false
+end
+
+-- Tunggu timer mesin = 0 / ready
+local function waitTimerReady(timeout)
+    timeout = timeout or 300
+    local t = 0
+    while t < timeout and AutoMutate.running do
+        local txt = timerLabel and timerLabel.Text or ""
+        if txt == "" or txt == "0" or txt == "0s" or txt:lower() == "ready" then
+            return true
+        end
+        task.wait(1)
+        t = t + 1
+    end
+    return false
+end
+
+-- Load reduce-time loadout (config type: "mutate reduce time", file: "default")
+local function loadReduceLoadout()
+    local uuids = getConfigUUIDs("mutate reduce time", "default")
+    if #uuids > 0 then
+        pet.equipList(uuids)
+    else
+        win:luluNotify("Reduce Time: config 'default' kosong!", "warn")
+    end
+end
+
+-- ============================================================
+-- CORE: proses 1 pet ke mesin mutasi
+-- ============================================================
+local function processMutation(petUUID)
+    -- 1. Unequip semua
+    pet.unequipAllActive()
+    task.wait(0.5)
+
+    -- 2. Equip hanya target pet
+    pet.equipList({ petUUID })
+    task.wait(1)
+
+    -- 3. Prompt mesin (buka UI)
+    fireproximityprompt(proxPrompt)
+    task.wait(3)
+
+    -- 4. Klik konfirmasi
+    clickConfirm()
+    task.wait(0.5)
+
+    -- 5. Prompt mesin kedua (submit pet)
+    fireproximityprompt(proxPrompt)
+    task.wait(1)
+
+    -- 6. Mesin jalan → load reduce time
+    if AutoMutate.reduceTime then
+        loadReduceLoadout()
+    end
+
+    -- 7. Tunggu timer selesai
+    local ready = waitTimerReady(300)
+    if not ready then
+        win:luluNotify("AutoMutate: Timer timeout!", "error")
+        return false, ""
+    end
+
+    -- 8. Unequip reduce time, balik ke target aja
+    pet.unequipAllActive()
+    task.wait(0.5)
+    pet.equipList({ petUUID })
+    task.wait(1)
+
+    -- 9. Prompt untuk ambil hasil
+    fireproximityprompt(proxPrompt)
+    task.wait(3)
+    clickConfirm()
+    task.wait(2)
+
+    -- 10. Cek nama baru berdasarkan UUID
+    pet.scanAll()
+    task.wait(0.5)
+
+    local newName = getPetNameByUUID(petUUID)
+    return true, newName or ""
+end
+
+-- ============================================================
+-- MAIN LOOP
+-- ============================================================
+local function autoMutateLoop()
+    if not initRefs() then
+        win:luluNotify("AutoMutate: Mesin mutasi tidak ditemukan!", "error")
+        AutoMutate.running = false
+        return
+    end
+
+    win:luluNotify("AutoMutate dimulai...", "info")
+    AutoMutate.doneCount = 0
+
+    -- Ambil UUIDs helper leveling dari config LV Lv1
+    local helperUUIDs = {}
+    if selNames.LVLv1 ~= "" then
+        helperUUIDs = getConfigUUIDs("leveling lv 1", selNames.LVLv1)
+    end
+    if #helperUUIDs == 0 then
+        win:luluNotify("AutoMutate: LV Lv1 kosong, leveling tanpa helper!", "warn")
+    end
+
+    local needed = AutoMutate.multiCount
+
+    while AutoMutate.running and AutoMutate.doneCount < needed do
+        -- Refresh scan
+        pet.scanAll()
+        task.wait(0.3)
+
+        local targetName = AutoMutate.targetPetName
+        local available  = findAllPetsByName(targetName)
+
+        if #available == 0 then
+            win:luluNotify("Ga ada " .. targetName .. " di backpack!", "warn")
+            break
+        end
+
+        local target   = available[1]
+        local baseName = target.name
+
+        -- === LEVELING PHASE ===
+        pet.unequipAllActive()
+        task.wait(0.5)
+
+        local toEquip = { target.uuid }
+        for _, uid in ipairs(helperUUIDs) do
+            table.insert(toEquip, uid)
+        end
+        pet.equipList(toEquip)
+        task.wait(1)
+
+        win:luluNotify("Leveling " .. baseName .. " → target 50...", "info")
+
+        local levelTimeout = 300
+        local elapsed = 0
+        while elapsed < levelTimeout and AutoMutate.running do
+            local age = pet.getAge(target.uuid)
+            if age >= 50 then break end
+            task.wait(2)
+            elapsed = elapsed + 2
+        end
+
+        if not AutoMutate.running then break end
+
+        -- === MUTATION PHASE ===
+        win:luluNotify("Age 50! Masuk mesin mutasi...", "info")
+
+        local ok, newName = processMutation(target.uuid)
+        if not ok then break end
+
+        local mutation = extractMutation(newName, baseName)
+        local mutLabel = mutation ~= "" and mutation or "None"
+
+        win:luluNotify("Hasil: " .. mutLabel .. " (" .. newName .. ")", "info")
+
+        if mutation == AutoMutate.targetMutation then
+            AutoMutate.doneCount = AutoMutate.doneCount + 1
+            win:luluNotify("✓ " .. baseName .. " → " .. newName
+                .. " [" .. AutoMutate.doneCount .. "/" .. needed .. "]", "success")
+        else
+            win:luluNotify("Bukan target (" .. AutoMutate.targetMutation
+                .. "), lanjut ke pet berikutnya...", "warn")
+        end
+
+        task.wait(2)
+    end
+
+    AutoMutate.running = false
+    win:luluNotify(
+        "AutoMutate selesai! Done: "
+        .. AutoMutate.doneCount .. "/" .. needed,
+        "success"
+    )
+end
+
+-- ============================================================
+-- UI TAB
+-- ============================================================
+local tabAM = win:Tab("🧬 Auto Mutate")
+
+-- ── Pet Target ──────────────────────────────────────────────
+tabAM:Accordion("Pet Target", function(sec)
+    -- Dropdown: pet yang mau dimutasi (dari scan backpack)
+    local petNames = {}
+    for _, p in ipairs(State.AllPets or {}) do
+        if not table.find(petNames, p.name) then
+            table.insert(petNames, p.name)
+        end
+    end
+    table.sort(petNames)
+
+    local ddPet = sec:Dropdown("Chose Pets", petNames, function(val)
+        AutoMutate.targetPetName = val
+    end)
+
+    -- Rescan tombol
+    sec:Button("🔄 Rescan Backpack", function()
+        pet.scanAll()
+        task.wait(0.3)
+        local fresh = {}
+        for _, p in ipairs(State.AllPets or {}) do
+            if not table.find(fresh, p.name) then table.insert(fresh, p.name) end
+        end
+        table.sort(fresh)
+        pcall(function() if ddPet and ddPet.SetOptions then ddPet:SetOptions(fresh) end end)
+        win:luluNotify("Rescanned!", "success")
+    end)
+
+    -- Info: helper leveling dari LV Lv1
+    local helperInfo = selNames.LVLv1 ~= ""
+        and ("Helper Leveling: LV Lv1 [" .. selNames.LVLv1 .. "]")
+        or  "Helper Leveling: LV Lv1 belum di-set!"
+    sec:TextLine(helperInfo)
+end)
+
+-- ── Mutation Config ─────────────────────────────────────────
+tabAM:Accordion("Mutation Config", function(sec)
+    -- Target mutation dropdown
+    sec:Dropdown("Target Mutation", MUTATIONS, function(val)
+        AutoMutate.targetMutation = val
+    end)
+
+    -- Reduce Time toggle (pakai config "mutate reduce time" → file "default")
+    sec:Toggle("Reduce Time", false, function(val)
+        AutoMutate.reduceTime = val
+        if val then
+            win:luluNotify(
+                "Reduce Time ON — pastikan ada config 'default' di mutate reduce time",
+                "info"
+            )
+        end
+    end)
+
+    -- Multi leveling 1–7 (berapa pet yang mau dimutasi per sesi)
+    sec:Slider("Multi Leveling", 1, 7, 1, function(val)
+        AutoMutate.multiCount = math.floor(val)
+    end)
+end)
+
+-- ── Control ─────────────────────────────────────────────────
+tabAM:Accordion("Control", function(sec)
+    sec:Toggle("Start Auto Mutated", false, function(val)
+        if val then
+            if AutoMutate.targetPetName == "" then
+                win:luluNotify("Pilih pet target dulu!", "error")
+                return
+            end
+            AutoMutate.running    = true
+            AutoMutate.doneCount  = 0
+            AutoMutate.thread     = task.spawn(autoMutateLoop)
+        else
+            AutoMutate.running = false
+            if AutoMutate.thread then
+                task.cancel(AutoMutate.thread)
+                AutoMutate.thread = nil
+            end
+            win:luluNotify("AutoMutate dihentikan.", "warn")
+        end
+    end)
+end)
