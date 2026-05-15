@@ -291,7 +291,7 @@ local function processMutation(petUUID)
     fireproximityprompt(proxPrompt)
 
     -- 10. Jeda sebelum cek hasil (atur dari sini)
-    task.wait(5)
+    task.wait(10)
 
     -- 11. Lepas yang dipegang di tangan
     local ch  = LP.Character
