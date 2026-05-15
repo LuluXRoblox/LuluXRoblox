@@ -1,0 +1,107 @@
+-- auto_reconnect.lua
+-- unlimited reconnect + unlimited reexecute
+
+repeat task.wait() until game:IsLoaded()
+
+print("Auto reconnect&rejoin has ready")
+
+local Players = game:GetService("Players")
+local TeleportService = game:GetService("TeleportService")
+local CoreGui = game:GetService("CoreGui")
+
+local player = Players.LocalPlayer
+local placeId = game.PlaceId
+
+-- ============================================================
+-- URL SCRIPT INI SENDIRI
+-- upload file ini ke github/raw lalu isi url nya
+-- ============================================================
+
+getgenv().AUTO_RECONNECT_FILE = "https://raw.githubusercontent.com/LuluXRoblox/LuluXRoblox/main/auto_reconnect.lua"
+
+-- ============================================================
+-- PASANG AUTO EXECUTE ULANG
+-- ============================================================
+
+local queueCode = [[
+
+repeat task.wait() until game:IsLoaded()
+
+task.wait(8)
+
+print("Auto reconnect succes✓")
+
+loadstring(game:HttpGet("]] .. getgenv().AUTO_RECONNECT_FILE .. [[", true))()
+
+]]
+
+if queue_on_teleport then
+    queue_on_teleport(queueCode)
+elseif syn and syn.queue_on_teleport then
+    syn.queue_on_teleport(queueCode)
+end
+
+-- ============================================================
+-- EXECUTE LOADER
+-- ============================================================
+
+task.spawn(function()
+
+    local BASE = "https://raw.githubusercontent.com/LuluXRoblox/LuluXRoblox/main/LuluXGaG/"
+
+    local PARTS = {
+        "TimeLicence",
+        "ServiceState",
+        "ConfigHelpers",
+        "PetHelpers",
+        "Systems",
+        "Ui",
+    }
+
+    local combined = ""
+
+    for _, name in ipairs(PARTS) do
+
+        local ok, content = pcall(function()
+            return game:HttpGet(BASE .. name, true)
+        end)
+
+        if ok and content and content ~= "" then
+            combined = combined .. "\n" .. content
+        else
+            warn("[LuluXGAG] Fail fetch:", name)
+        end
+    end
+
+    local fn, err = loadstring(combined)
+
+    if not fn then
+        warn("[LuluXGAG] Compile failed")
+        warn(err)
+        return
+    end
+
+    local success, runtimeErr = pcall(fn)
+
+    if success then
+        print("Auto execute succes✓")
+    else
+        warn(runtimeErr)
+    end
+
+end)
+
+-- ============================================================
+-- AUTO RECONNECT
+-- ============================================================
+
+CoreGui.RobloxPromptGui.promptOverlay.ChildAdded:Connect(function(v)
+
+    if v.Name == "ErrorPrompt" then
+
+        task.wait(2)
+
+        TeleportService:Teleport(placeId)
+
+    end
+end)
