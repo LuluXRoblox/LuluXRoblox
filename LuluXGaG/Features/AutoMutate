@@ -49,21 +49,53 @@ local Backpack   = LP.Backpack
 local proxPrompt, timerLabel
 
 local function initRefs()
-    local ok = pcall(function()
+    local errMsg = ""
+
+    -- 1. Proximity Prompt
+    local okProx = pcall(function()
         local npcs    = workspace:WaitForChild("NPCS", 15)
         local machine = npcs:WaitForChild("PetMutationMachine", 15)
         local model   = machine:WaitForChild("Model", 15)
-
         local proxPart = model:WaitForChild("ProxPromptPart", 15)
         proxPrompt = proxPart:WaitForChild("PetMutationMachineProximityPrompt", 15)
+    end)
+    if not okProx then
+        errMsg = errMsg .. "[AutoMutate] ProximityPrompt TIDAK DITEMUKAN!\n"
+        errMsg = errMsg .. "  Path: workspace.NPCS.PetMutationMachine.Model.ProxPromptPart.PetMutationMachineProximityPrompt\n"
+    end
 
-        local billPart = model:WaitForChild("Part", 15)
+    -- 2. Timer Label — parent dari BillboardPart tidak bernama "Part",
+    --    jadi loop GetChildren() dari Model untuk cari BillboardPart
+    local okTimer = pcall(function()
+        local npcs    = workspace:WaitForChild("NPCS", 15)
+        local machine = npcs:WaitForChild("PetMutationMachine", 15)
+        local model   = machine:WaitForChild("Model", 15)
+        -- Cari child mana pun di Model yang punya BillboardPart
+        local billPart = nil
+        for _, child in ipairs(model:GetChildren()) do
+            local bp = child:FindFirstChild("BillboardPart")
+            if bp then billPart = bp; break end
+        end
+        if not billPart then
+            -- Fallback: coba recursive
+            billPart = model:FindFirstChild("BillboardPart", true)
+        end
+        if not billPart then error("BillboardPart not found") end
         timerLabel = billPart
-            :WaitForChild("BillboardPart", 15)
             :WaitForChild("BillboardGui", 15)
             :WaitForChild("TimerTextLabel", 15)
     end)
-    return ok
+    if not okTimer then
+        errMsg = errMsg .. "[AutoMutate] TimerTextLabel TIDAK DITEMUKAN!\n"
+        errMsg = errMsg .. "  Pastikan ada BillboardPart di salah satu child dari:\n"
+        errMsg = errMsg .. "  workspace.NPCS.PetMutationMachine.Model:GetChildren()\n"
+    end
+
+    if errMsg ~= "" then
+        warn(errMsg)
+    end
+
+    return okProx and okTimer
 end
 
 -- ============================================================
