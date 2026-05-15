@@ -25,9 +25,9 @@ local MUTATIONS = {
 local AutoMutate = {
     running          = false,
     thread           = nil,
-    targetPetName    = "",
+    targetDisplay    = "",   -- display string yang dipilih (buat re-select)
+    targetUUID       = "",   -- UUID spesifik pet target
     targetMutation   = "Rainbow",
-    reduceTime       = false,
     multiCount       = 1,
     doneCount        = 0,
     helperConfigName = selNames.MutateHelper or "",
@@ -183,8 +183,8 @@ local function processMutation(petUUID)
     fireproximityprompt(proxPrompt)
     task.wait(1)
 
-    -- 6. Mesin jalan → load reduce time
-    if AutoMutate.reduceTime then
+    -- 6. Mesin jalan → load reduce time (jika config sudah dipilih)
+    if AutoMutate.reduceConfigName ~= "" then
         loadReduceLoadout()
     end
 
@@ -244,15 +244,23 @@ local function autoMutateLoop()
         pet.scanAll()
         task.wait(0.3)
 
-        local targetName = AutoMutate.targetPetName
-        local available  = findAllPetsByName(targetName)
-
-        if #available == 0 then
-            win:luluNotify("Ga ada " .. targetName .. " di backpack!", "warn")
+        -- Ambil pet target langsung dari UUID (bukan cari by name → ga miss)
+        local targetUUID = AutoMutate.targetUUID
+        if not targetUUID or targetUUID == "" then
+            win:luluNotify("AutoMutate: Belum pilih pet target!", "warn")
             break
         end
 
-        local target   = available[1]
+        local target = nil
+        for _, p in ipairs(State.AllPets or {}) do
+            if p.uuid == targetUUID then target = p; break end
+        end
+
+        if not target then
+            win:luluNotify("AutoMutate: Pet target ga ditemukan di backpack!", "warn")
+            break
+        end
+
         local baseName = target.name
 
         -- === LEVELING PHASE ===
@@ -317,50 +325,34 @@ local tabAM = win:Tab("Auto Mutate")
 
 -- ── Pet Target ──────────────────────────────────────────────
 tabAM:Accordion("Pet Target", function(sec)
-    -- Dropdown: pet yang mau dimutasi (dari scan backpack)
-    local petNames = {}
-    for _, p in ipairs(State.AllPets or {}) do
-        if not table.find(petNames, p.name) then
-            table.insert(petNames, p.name)
-        end
-    end
-    table.sort(petNames)
+    -- Dropdown individual per UUID, kayak KG target
+    -- Pakai State.DisplayKGTarget yang sudah di-populate dari scanAll
+    local displays = State.DisplayKGTarget or {}
 
-    local ddPet = sec:Dropdown("Chose Pets", petNames, "", function(val)
-        AutoMutate.targetPetName = val
+    local ddPet = sec:Dropdown("Chose Pets", displays, "", function(val)
+        AutoMutate.targetDisplay = val
+        local p = State.DisplayToPet and State.DisplayToPet[val]
+        AutoMutate.targetUUID = p and p.uuid or ""
     end)
 
-    -- Rescan tombol
     sec:Button("Rescan Backpack", function()
         pet.scanAll()
-        task.wait(0.3)
-        local fresh = {}
-        for _, p in ipairs(State.AllPets or {}) do
-            if not table.find(fresh, p.name) then table.insert(fresh, p.name) end
-        end
-        table.sort(fresh)
-        pcall(function() if ddPet and ddPet.SetOptions then ddPet:SetOptions(fresh) end end)
+        task.wait(0.5)
+        local fresh = State.DisplayKGTarget or {}
+        pcall(function() if ddPet then ddPet:SetOptions(fresh) end end)
         win:luluNotify("Rescanned!", "success")
     end)
 
-    -- ── Helper Leveling (config terpisah: "mutate helper lv") ────
-    local helperOptions = getConfigsByType and getConfigsByType("mutate helper lv") or {}
-
-    local ddHelper = sec:Dropdown(
+    -- Helper Leveling — auto load dari config "mutate helper lv" (no refresh button)
+    sec:Dropdown(
         "Helper Leveling",
-        helperOptions,
+        getConfigsByType("mutate helper lv"),
         AutoMutate.helperConfigName,
         function(val)
             AutoMutate.helperConfigName = val
             selNames.MutateHelper       = val
         end
     )
-
-    sec:Button("Refresh Helper Config", function()
-        local opts = getConfigsByType and getConfigsByType("mutate helper lv") or {}
-        pcall(function() if ddHelper and ddHelper.SetOptions then ddHelper:SetOptions(opts) end end)
-        win:luluNotify("Helper config list refreshed!", "info")
-    end)
 end)
 
 -- ── Mutation Config ─────────────────────────────────────────
@@ -370,35 +362,16 @@ tabAM:Accordion("Mutation Config", function(sec)
         AutoMutate.targetMutation = val
     end)
 
-    -- Reduce Time toggle
-    sec:Toggle("Reduce Time", false, function(val)
-        AutoMutate.reduceTime = val
-        if val then
-            win:luluNotify(
-                "Reduce Time ON — pastikan sudah pilih config di bawah",
-                "info"
-            )
-        end
-    end)
-
-    -- Dropdown: pilih config "mutate reduce time" yang mau dipakai
-    local reduceOptions = getConfigsByType and getConfigsByType("mutate reduce time") or {}
-
-    local ddReduce = sec:Dropdown(
+    -- Reduce Mutation Config — auto load, tanpa toggle & tanpa refresh button
+    sec:Dropdown(
         "Reduce Mutation Config",
-        reduceOptions,
+        getConfigsByType("mutate reduce time"),
         AutoMutate.reduceConfigName,
         function(val)
             AutoMutate.reduceConfigName = val
             selNames.MutateReduce       = val
         end
     )
-
-    sec:Button("Refresh Reduce Config", function()
-        local opts = getConfigsByType and getConfigsByType("mutate reduce time") or {}
-        pcall(function() if ddReduce and ddReduce.SetOptions then ddReduce:SetOptions(opts) end end)
-        win:luluNotify("Reduce config list refreshed!", "info")
-    end)
 
     -- Multi leveling 1–7
     sec:NumberInput("Multi Leveling", 1, 1, 1, 7, function(val)
@@ -410,7 +383,7 @@ end)
 tabAM:Accordion("Control", function(sec)
     sec:Toggle("Start Auto Mutated", false, function(val)
         if val then
-            if AutoMutate.targetPetName == "" then
+            if AutoMutate.targetUUID == "" then
                 win:luluNotify("Pilih pet target dulu!", "error")
                 return
             end
