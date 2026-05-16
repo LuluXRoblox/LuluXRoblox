@@ -450,6 +450,8 @@ end
 local PetAPI = {
     scanAll          = scanAll,
     getAge           = getAge,
+    getPetDisplay    = getPetDisplay,
+    readPetAge       = readPetAge,
     unequipAllActive = unequipAllActive,
     equipList        = equipList,
     unequipList      = unequipList,
