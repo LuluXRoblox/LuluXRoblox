@@ -21,7 +21,7 @@ end)
 -- ============================================================
 -- SERVICES
 -- ============================================================
-local SCRIPT_VERSION    = "LuluXZeaxyy-V8"
+local SCRIPT_VERSION    = "LuluXZeaGaG[release][V1]"
 local Players           = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local HttpService       = game:GetService("HttpService")
@@ -108,7 +108,12 @@ local State = {
     ShowPnp           = true,
     ShowAllProg       = true,
     ShowBoost         = true,
+    ShowAEStats       = true,
+    ShowAMInfo        = true,
     AllProgLastStatus = "",
+    -- Session restore flags (set by loadSettings, consumed after UI init)
+    RestoreAE         = false,
+    RestorePnP        = false,
     DisplayKGTarget   = {},
     DisplayLVTarget   = {},
     OthersLoadoutUUIDs = {},
@@ -142,23 +147,33 @@ local PnP = {
     Sync              = false, SyncPaused      = false,
     Processing        = {},    Status          = {},
     LabelOrder        = {},    LabelSet        = {},
-    OnSkillPets       = {},    OnSkillUUIDs    = {},
-    AfterSkillPets    = {},    AfterSkillUUIDs = {},
-    UUIDCache         = {},    -- { [petName] = { [uuid] = true } } — persistent, hanya grows
+    -- Legacy name-based (untuk kompatibilitas save/load lama)
+    OnSkillPets       = {},    AfterSkillPets  = {},
+    -- Baru: UUID langsung dari backpack scan
+    OnSkillList       = {},    AfterSkillList  = {},
+    OnSkillUUIDs      = {},    AfterSkillUUIDs = {},
+    UUIDCache         = {},
     PrevCD            = {},    LastSeen        = {},
-    ActiveHelperUUIDs = {},  ClearLoading      = false,
+    ActiveHelperUUIDs = {},    ClearLoading    = false,
 }
 
 local boost = {
     Running       = false, Thread        = nil,
-    ScanMap       = {},    Displays      = {},    Selected      = {},
+    -- Slot A & B — UUID langsung dari backpack scan, tidak perlu rescan saat eksekusi
+    UUIDs         = {},    -- Slot A: {uuid,...}
+    UUIDsB        = {},    -- Slot B: {uuid,...}
+    ActiveSlot    = "A",
+    -- Scan data shared dengan PnP
+    Displays      = {},    DispMap       = {},
+    -- Legacy
+    ScanMap       = {},    Selected      = {},
     ToyMode       = "Small", SavedUUIDs  = {},
     DelayMin      = 1,
     MonitorUUID   = nil,   SmallPending  = false, MediumPending = false,
-    Monitors      = {},    -- { [uuid] = { small=nil, medium=nil } }  1 per pet
+    Monitors      = {},
 }
 
-local Webhook = { Url = "", KG = false, LV = false }
+local Webhook = { Url = "", KG = false, LV = false, AE = false, AB = false }
 
 local Lag = {
     Spider     = false, Pets       = false, Spotted    = false,
@@ -177,6 +192,17 @@ local AutoEgg = {
     ChosenEggs       = {},    SellPets         = {},
     GoodHatchPets    = {},    -- pet names yang selalu good hatch terlepas dari berat
     MaxWeightSell    = 5.0,
+    LastLoadWasGoodHatch = false,
+}
+
+-- Auto Egg statistics — accumulated, saved to file
+-- Cleared only when specific reset button is pressed (not on toggle off)
+-- eggReturn/goodHatch/sellReturn clear on toggle OFF, hatchTotal never clears
+local AEStats = {
+    eggReturn  = 0,   -- eggs re-placed after hatch cycle
+    goodHatch  = 0,   -- pets processed by good hatch loadout
+    sellReturn = 0,   -- pets processed by sell loadout
+    hatchTotal = 0,   -- total eggs hatched (persists forever)
 }
 
 -- uuid → { petName, baseWeight, weightMin, weightMax, hugeChance,
