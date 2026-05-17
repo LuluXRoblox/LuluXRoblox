@@ -5,6 +5,12 @@
 -- SETTINGS SAVE / LOAD
 -- ============================================================
 local function getBoostSelectedUUIDs()
+    -- Slot A/B langsung, tidak perlu ScanMap lookup
+    if boost.ActiveSlot == "B" and #boost.UUIDsB > 0 then
+        return boost.UUIDsB
+    end
+    if #boost.UUIDs > 0 then return boost.UUIDs end
+    -- Legacy fallback
     local uuids = {}
     for _, disp in ipairs(boost.Selected) do
         local uuid = boost.ScanMap[disp]
@@ -25,7 +31,15 @@ local function saveSettings()
         LVMany        = LV.Many,        LVTargetAge   = LV.TargetAge,
         PnPDelayPick  = PnP.DelayPick,  PnPDelayPlace = PnP.DelayPlace,
         PnPSync       = PnP.Sync,
-        WebhookUrl    = Webhook.Url,    WebhookKG     = Webhook.KG, WebhookLV = Webhook.LV,
+        WebhookUrl    = Webhook.Url,    WebhookKG     = Webhook.KG,
+        WebhookLV     = Webhook.LV,     WebhookAE     = Webhook.AE,
+        WebhookAB     = Webhook.AB,
+        -- AE stats (persistent)
+        AEStatsReturn = AEStats.eggReturn,   AEStatsGood  = AEStats.goodHatch,
+        AEStatsSell   = AEStats.sellReturn,  AEStatsHatch = AEStats.hatchTotal,
+        ShowAEStats   = State.ShowAEStats,   ShowAMInfo   = State.ShowAMInfo,
+        -- Session restore
+        AEWasRunning  = AutoEgg.Running,     PnPWasRunning = PnP.Running,
         boostSelectedUUIDs = getBoostSelectedUUIDs(),
         boostToyMode  = boost.ToyMode,
         Disable3D     = State.Disable3D,
@@ -73,9 +87,21 @@ local function loadSettings()
         if s.PnPDelayPick  then PnP.DelayPick  = s.PnPDelayPick  end
         if s.PnPDelayPlace then PnP.DelayPlace = s.PnPDelayPlace end
         if s.PnPSync    ~= nil then PnP.Sync      = s.PnPSync     end
-        if s.WebhookUrl   then Webhook.Url    = s.WebhookUrl   end
-        if s.WebhookKG  ~= nil then Webhook.KG    = s.WebhookKG   end
-        if s.WebhookLV  ~= nil then Webhook.LV    = s.WebhookLV   end
+        if s.WebhookUrl   then Webhook.Url = s.WebhookUrl   end
+        if s.WebhookKG  ~= nil then Webhook.KG = s.WebhookKG   end
+        if s.WebhookLV  ~= nil then Webhook.LV = s.WebhookLV   end
+        if s.WebhookAE  ~= nil then Webhook.AE = s.WebhookAE   end
+        if s.WebhookAB  ~= nil then Webhook.AB = s.WebhookAB   end
+        -- AE stats
+        if s.AEStatsReturn then AEStats.eggReturn  = s.AEStatsReturn end
+        if s.AEStatsGood   then AEStats.goodHatch  = s.AEStatsGood   end
+        if s.AEStatsSell   then AEStats.sellReturn = s.AEStatsSell   end
+        if s.AEStatsHatch  then AEStats.hatchTotal = s.AEStatsHatch  end
+        if s.ShowAEStats ~= nil then State.ShowAEStats = s.ShowAEStats end
+        if s.ShowAMInfo  ~= nil then State.ShowAMInfo  = s.ShowAMInfo  end
+        -- Session restore flags
+        if s.AEWasRunning  then State.RestoreAE  = true end
+        if s.PnPWasRunning then State.RestorePnP = true end
         if s.boostSelectedUUIDs and type(s.boostSelectedUUIDs) == "table" then
             boost.SavedUUIDs = s.boostSelectedUUIDs
         end
@@ -301,28 +327,11 @@ local function applyBoostDirect(uuid)
 end
 
 doScanBoostPets = function()
-    boost.ScanMap  = {}
-    boost.Displays = {}
-    pcall(function()
-        local seen = {}; local i = 0
-        for _, child in ipairs(getPetDisplay():GetChildren()) do
-            if child:IsA("Frame") and child:FindFirstChild("Main") then
-                i = i + 1
-                local m       = child.Main
-                local petName = m:FindFirstChild("PET_NAME") and m.PET_NAME.Text or ""
-                local petType = m:FindFirstChild("PET_TYPE") and m.PET_TYPE.Text or ""
-                local base
-                if petName ~= "" and petType ~= "" then base = petName .. " [" .. petType .. "]"
-                elseif petName ~= ""               then base = petName
-                elseif petType ~= ""               then base = petType
-                else                                    base = "Pet #" .. i end
-                local key = base; local n = 2
-                while seen[key] do key = base .. " (" .. n .. ")"; n = n + 1 end
-                seen[key] = true; boost.ScanMap[key] = child.Name
-                table.insert(boost.Displays, key)
-            end
-        end
-    end)
+    -- Scan dari Backpack (bukan ActivePetUI) — shared dengan PnP
+    scanBPPets()
+    -- boost.Displays & boost.DispMap sudah di-update oleh scanBPPets
+    boost.UUIDs  = {}   -- reset selection A
+    boost.UUIDsB = {}   -- reset selection B
     return #boost.Displays
 end
 
@@ -871,8 +880,11 @@ local function startAutoEgg()
             -- STEP 3: Plant eggs up to MaxPlace
             local placed = aeCountMyEggs()
             if placed < AutoEgg.MaxPlace and #AutoEgg.ChosenEggs > 0 then
-                task.wait(1)    -- jeda sebelum mulai tanam
+                task.wait(1)
                 aePlantBatch(AutoEgg.MaxPlace - placed)
+                -- Track eggs re-placed
+                local newPlaced = aeCountMyEggs()
+                AEStats.eggReturn = AEStats.eggReturn + math.max(0, newPlaced - placed)
             end
 
             -- STEP 4: Wait for all eggs to be ready (max 5 min timeout)
@@ -902,11 +914,10 @@ local function startAutoEgg()
             local readyList = aeGetReadyEggObjects()
             if #readyList == 0 then task.wait(2); continue end
 
+            -- Track total hatched this cycle
+            AEStats.hatchTotal = AEStats.hatchTotal + #readyList
+
             -- Categorise eggs
-            -- noData = tidak ada monitor sama sekali
-            -- baseWt == 0 = ada monitor tapi berat tidak diketahui (tampil "? kg")
-            -- Keduanya pakai Good Hatch slot
-            -- GoodHatchPets = nama pet yang selalu pakai good hatch walaupun weight tidak mencukupi
             local normalEggs, goodEggs = {}, {}
             for _, entry in ipairs(readyList) do
                 local baseWt     = (entry.mon and entry.mon.baseWeight) or 0
@@ -922,6 +933,9 @@ local function startAutoEgg()
                 if isGood then table.insert(goodEggs, entry)
                 else            table.insert(normalEggs, entry) end
             end
+
+            -- Track good hatch count
+            AEStats.goodHatch = AEStats.goodHatch + #goodEggs
 
             -- Snapshot Backpack SEBELUM semua hatch
             local snapshotUUIDs = {}
@@ -944,20 +958,47 @@ local function startAutoEgg()
                 unequipAllActive(); task.wait(0.5)
             end
 
-            -- STEP 9-11: Hatch good eggs (unknown + meet MinGoodHatch)
+            -- STEP 9-11: Hatch good eggs
             if #goodEggs > 0 then
                 if not AutoEgg.LastLoadWasGoodHatch and #AutoEgg.GoodHatchUUIDs > 0 then
                     safeEquipLoad(AutoEgg.GoodHatchUUIDs)
                     AutoEgg.LastLoadWasGoodHatch = true
                 end
-                task.wait(1.5)  -- jeda sebelum mulai hatch good
+                task.wait(1.5)
+                -- Snapshot before good hatch for DC notification
+                local preGoodSnap = {}
+                for _, item in ipairs(LP.Backpack:GetChildren()) do
+                    preGoodSnap[item:GetAttribute("PET_UUID") or item.Name] = true
+                end
                 for _, entry in ipairs(goodEggs) do
                     if not AutoEgg.Running then break end
                     aeHatchEgg(entry.obj); task.wait(0.1)
                     HatchMonitor[entry.uuid] = nil
                 end
-                unequipAllActive(); task.wait(0.5)
+                unequipAllActive(); task.wait(1)
                 AutoEgg.LastLoadWasGoodHatch = false
+                -- DC: send each newly hatched good pet
+                if Webhook.AE then
+                    task.spawn(function()
+                        task.wait(1)
+                        for _, item in ipairs(LP.Backpack:GetChildren()) do
+                            local uuid = item:GetAttribute("PET_UUID") or item.Name
+                            if preGoodSnap[uuid] then continue end
+                            if item:GetAttribute("PetType") ~= "Pet" then continue end
+                            local petName = item:GetAttribute("f") or ""
+                            local parsed  = parseName(item.Name)
+                            local kg      = parsed.kg or "?"
+                            sendWebhookEmbed({
+                                title       = "Good Hatch",
+                                description = "**You get " .. petName .. "**\nCurrent: " .. kg .. " KG",
+                                color       = 0x57F287,
+                                footer      = { text = "LuluXGAG " .. SCRIPT_VERSION },
+                                timestamp   = os.date("!%Y-%m-%dT%H:%M:%S"),
+                            })
+                            task.wait(0.3)
+                        end
+                    end)
+                end
             end
 
             -- STEP 12-14: Sell berdasarkan berat vs MinGoodHatch (berlaku untuk semua hatch)
@@ -992,7 +1033,8 @@ local function startAutoEgg()
                     table.insert(toSell, pet)
                 end
                 if #toSell > 0 then
-                    task.wait(1)    -- jeda sebelum mulai sell
+                    AEStats.sellReturn = AEStats.sellReturn + #toSell
+                    task.wait(1)
                     safeEquipLoad(AutoEgg.SellingUUIDs); task.wait(0.5)
                     local ch  = LP.Character
                     local hum = ch and ch:FindFirstChildOfClass("Humanoid")
@@ -1035,6 +1077,12 @@ end
 local function stopAutoEgg()
     AutoEgg.Running = false
     if AutoEgg.Thread then pcall(function() task.cancel(AutoEgg.Thread) end); AutoEgg.Thread = nil end
+    -- Save stats to file; clear session counters (eggReturn/goodHatch/sellReturn reset on OFF)
+    AEStats.eggReturn  = 0
+    AEStats.goodHatch  = 0
+    AEStats.sellReturn = 0
+    -- hatchTotal persists, never reset here
+    saveSettings()
 end
 
 -- ============================================================
