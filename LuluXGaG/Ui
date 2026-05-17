@@ -11,7 +11,7 @@ LuluUI.SetTheme("Purple")
 win = LuluUI.new({
     title    = "LuluXGAG",
     subtitle = SCRIPT_VERSION .. " | " .. displayName .. " | " .. expireText,
-    name     = "LuluXGAG[PETSYSTEM]",
+    name     = "LuluXGag [Pet&Shop systems]",
     width    = 450,
     height   = 345,
 })
@@ -118,6 +118,9 @@ grp.Pnp         = info:Group(); grp.Pnp:Hide()
 grp.Jumbo       = info:Group(); grp.Jumbo:Hide()
 grp.Boost       = info:Group(); grp.Boost:Hide()
 grp.OnProgress  = info:Group(); grp.OnProgress:Hide()
+grp.AMInfo      = info:Group(); grp.AMInfo:Hide()
+grp.AMAll       = info:Group(); grp.AMAll:Hide()
+grp.AEStats     = info:Group(); grp.AEStats:Hide()
 
 task.spawn(function()
     while true do
@@ -213,6 +216,21 @@ task.spawn(function()
                 grp.EggInfo:Hide()
             end
             -- ── END EGG INFO ──────────────────────────────────────────
+
+            -- ── AE STATS PANEL ────────────────────────────────────────
+            if AutoEgg.Running and State.ShowAEStats then
+                grp.AEStats:Show()
+                grp.AEStats:Clear()
+                grp.AEStats:Header("Egg Stats")
+                grp.AEStats:QuestLine("Current Egg",  tostring(aeCountMyEggs()) .. " / " .. AutoEgg.MaxPlace)
+                grp.AEStats:QuestLine("Egg Return",   tostring(AEStats.eggReturn))
+                grp.AEStats:QuestLine("Good Hatch",   tostring(AEStats.goodHatch))
+                grp.AEStats:QuestLine("Sell Return",  tostring(AEStats.sellReturn))
+                grp.AEStats:QuestLine("Hatch Total",  tostring(AEStats.hatchTotal))
+            else
+                grp.AEStats:Hide()
+            end
+            -- ── END AE STATS ──────────────────────────────────────────
 
             local activePets = getActivePets()
             local activeMap  = {}
@@ -523,24 +541,35 @@ tab.Main:Accordion("Auto Leveling", function(sec)
 end)
 
 tab.Main:Accordion("Pick & Place Pets", function(sec)
-    PnP.ddOnSkill = sec:MultiDropdown("On Skill", State.AllPetNames, {}, function(sel)
-        PnP.OnSkillPets = sel
+    PnP.ddOnSkill = sec:MultiDropdown("On Skill", bpDisplays, {}, function(sel)
+        PnP.OnSkillList = {}
+        for _, disp in ipairs(sel) do
+            local uuid = bpDispMap[disp]
+            if uuid then table.insert(PnP.OnSkillList, uuid) end
+        end
+        PnP.OnSkillUUIDs = {}
+        for _, uuid in ipairs(PnP.OnSkillList) do PnP.OnSkillUUIDs[uuid] = true end
         PnP.Status={}; PnP.LabelOrder={}; PnP.LabelSet={}; PnP.Processing={}; PnP.LastSeen={}; PnP.PrevCD={}
-        rebuildPnPUUIDs()
     end)
-    PnP.ddAfterSkill = sec:MultiDropdown("After Skill", State.AllPetNames, {}, function(sel)
-        PnP.AfterSkillPets = sel
-        PnP.AfterSkillUUIDs={}; PnP.PrevCD={}
-        PnP.Status={}; PnP.LabelOrder={}; PnP.LabelSet={}; PnP.Processing={}; PnP.LastSeen={}
-        rebuildPnPUUIDs()
+
+    PnP.ddAfterSkill = sec:MultiDropdown("After Skill", bpDisplays, {}, function(sel)
+        PnP.AfterSkillList = {}
+        for _, disp in ipairs(sel) do
+            local uuid = bpDispMap[disp]
+            if uuid then table.insert(PnP.AfterSkillList, uuid) end
+        end
+        PnP.AfterSkillUUIDs = {}
+        for _, uuid in ipairs(PnP.AfterSkillList) do PnP.AfterSkillUUIDs[uuid] = true end
+        PnP.Status={}; PnP.LabelOrder={}; PnP.LabelSet={}; PnP.Processing={}; PnP.LastSeen={}; PnP.PrevCD={}
     end)
+
     sec:NumberInput("Delay Pick",  PnP.DelayPick,  0.01, 0, 60, function(v) PnP.DelayPick =v; saveSettings() end)
     sec:NumberInput("Delay Place", PnP.DelayPlace, 0.01, 0, 60, function(v) PnP.DelayPlace=v; saveSettings() end)
     sec:Toggle("Sync", PnP.Sync, function(on) PnP.Sync=on; saveSettings() end)
-    sec:Toggle("Start PnP", false, function(on)
+    tgl.PnPStart = sec:Toggle("Start PnP", false, function(on)
         PnP.Running=on
         if on then
-            rebuildPnPUUIDs()  -- rescan UUID sekarang (termasuk pet yang sudah di-place)
+            -- UUID sudah disimpan dari dropdown, tidak perlu rebuild
             PnP.Status={}; PnP.LabelOrder={}; PnP.LabelSet={}; PnP.Processing={}; PnP.PrevCD={}
             local onCt,aftCt=0,0
             for _ in pairs(PnP.OnSkillUUIDs)    do onCt =onCt +1 end
@@ -554,23 +583,36 @@ tab.Main:Accordion("Pick & Place Pets", function(sec)
 end)
 
 tab.Main:Accordion("Auto Toy Boost", function(sec)
-    sec:Button("Scan Pets", function()
-        local count=doScanBoostPets()
-        if ddMisc.Boost then ddMisc.Boost:SetOptions(boost.Displays) end
-        boost.Selected={}
-        local hasSmall=findBoostTool("Small")~=nil; local hasMedium=findBoostTool("Medium")~=nil
-        local toolInfo=""
-        if hasSmall  then toolInfo=toolInfo.."Small  " end
-        if hasMedium then toolInfo=toolInfo.."Medium" end
-        if not hasSmall and not hasMedium then toolInfo="No toy in backpack" end
-        win:luluNotify("Scan Done! "..count.." pets | "..toolInfo, (hasSmall or hasMedium) and "success" or "warning")
+    -- Slot A — aktif boost (UUID disimpan langsung, tidak perlu rescan)
+    ddMisc.BoostA = sec:MultiDropdown("Slot A", bpDisplays, {}, function(sel)
+        boost.UUIDs = {}
+        for _, disp in ipairs(sel) do
+            local uuid = bpDispMap[disp]
+            if uuid then table.insert(boost.UUIDs, uuid) end
+        end
+        saveSettings()
     end)
-    ddMisc.Boost = sec:MultiDropdown("Select Pets", boost.Displays, {}, function(sel) boost.Selected=sel; saveSettings() end)
+
+    -- Slot B — pre-cached, switch tanpa rescan
+    ddMisc.BoostB = sec:MultiDropdown("Slot B", bpDisplays, {}, function(sel)
+        boost.UUIDsB = {}
+        for _, disp in ipairs(sel) do
+            local uuid = bpDispMap[disp]
+            if uuid then table.insert(boost.UUIDsB, uuid) end
+        end
+        saveSettings()
+    end)
+
+    -- Toggle aktif slot
+    sec:Toggle("Use Slot B", false, function(on)
+        boost.ActiveSlot = on and "B" or "A"
+        win:luluNotify("Boost active slot: "..boost.ActiveSlot, "info")
+    end)
+
     sec:Dropdown("Select Toy", {"Both","Small","Medium"}, boost.ToyMode, function(sel) boost.ToyMode=sel; saveSettings() end)
     sec:Button("Apply Once", function()
-        if #boost.Selected==0 then win:luluNotify("Choose pet first!", "warning"); return end
         local uuids=getBoostSelectedUUIDs()
-        if #uuids==0 then win:luluNotify("Rescan — pet not found!", "warning"); return end
+        if #uuids==0 then win:luluNotify("Pilih pet di Slot A/B dulu!", "warning"); return end
         if not findBoostTool("Small") and not findBoostTool("Medium") then win:luluNotify("No toy!", "warning"); return end
         win:luluNotify("Applying to "..#uuids.." pet(s)...", "info")
         task.spawn(function()
@@ -581,17 +623,13 @@ tab.Main:Accordion("Auto Toy Boost", function(sec)
     sec:Toggle("Auto Boost", false, function(on)
         boost.Running=on
         if on then
-            if #boost.Selected==0 then boost.Running=false; return end
             local uuids=getBoostSelectedUUIDs()
             if #uuids==0 then boost.Running=false; return end
             if not findBoostTool("Small") and not findBoostTool("Medium") then boost.Running=false; return end
             startBoostLoop()
         else
-            boost.Running      = false
-            boost.MonitorUUID  = nil
-            boost.SmallPending = false
-            boost.MediumPending= false
-            boost.Monitors     = {}
+            boost.Running=false; boost.MonitorUUID=nil
+            boost.SmallPending=false; boost.MediumPending=false; boost.Monitors={}
         end
     end)
 end)
@@ -687,7 +725,7 @@ tab.Main:Accordion("Auto Egg", function(sec)
     )
     sec:Label("Pets di sini selalu Good Hatch walaupun KG tidak mencukupi Min Good Hatch", {size=10,color=Color3.fromRGB(160,160,180)})
 
-    sec:Toggle("Auto Hatch", false, function(on)
+    tgl.AEStart = sec:Toggle("Auto Hatch", false, function(on)
         if on then startAutoEgg() else stopAutoEgg() end
     end)
 
@@ -873,8 +911,10 @@ tab.Misc:Accordion("Webhook", function(sec)
         sendWebhookEmbed({title="Test Webhook",description="Webhook connected!",color=0x57F287,footer={text="LuluXGAG "..SCRIPT_VERSION},timestamp=os.date("!%Y-%m-%dT%H:%M:%S")})
         win:luluNotify("Test sent!", "success")
     end)
-    sec:Toggle("Webhook Auto KG", Webhook.KG, function(on) Webhook.KG=on; saveSettings() end)
-    sec:Toggle("Webhook Auto LV", Webhook.LV, function(on) Webhook.LV=on; saveSettings() end)
+    sec:Toggle("Webhook Auto KG",  Webhook.KG, function(on) Webhook.KG=on; saveSettings() end)
+    sec:Toggle("Webhook Auto LV",  Webhook.LV, function(on) Webhook.LV=on; saveSettings() end)
+    sec:Toggle("Webhook Auto Egg", Webhook.AE, function(on) Webhook.AE=on; saveSettings() end)
+    sec:Toggle("Webhook Auto Buy", Webhook.AB, function(on) Webhook.AB=on; saveSettings() end)
 end)
 
 tab.Misc:Accordion("Utility Player", function(sec)
@@ -894,6 +934,8 @@ tab.Misc:Accordion("Panel Settings", function(sec)
     sec:Toggle("Show PnP Panel",      State.ShowPnp,      function(on) State.ShowPnp     =on; saveSettings(); if not on then grp.Pnp:Hide() end end)
     sec:Toggle("Show Boost Panel",    State.ShowBoost,    function(on) State.ShowBoost   =on; saveSettings(); if not on then grp.Boost:Hide() end end)
     sec:Toggle("Show All Progress",   State.ShowAllProg,  function(on) State.ShowAllProg =on; saveSettings(); if not on then grp.AllProgress:Hide() end end)
+    sec:Toggle("Show AE Stats",       State.ShowAEStats,  function(on) State.ShowAEStats =on; saveSettings(); if not on then grp.AEStats:Hide() end end)
+    sec:Toggle("Show AM Info",        State.ShowAMInfo,   function(on) State.ShowAMInfo  =on; saveSettings(); if not on then grp.AMInfo:Hide(); grp.AMAll:Hide() end end)
 end)
 
 -- ============================================================
@@ -1008,11 +1050,13 @@ _G.LGAG = {
     pet            = PetAPI,   -- dari 04_pet_helpers.lua
     getConfigUUIDs = getConfigUUIDs,
     getConfigsByType = getConfigsByType,
+    grp            = grp,
 }
 
 -- Load feature files dari GitHub (non-blocking)
 local FEATURES = {
     "https://raw.githubusercontent.com/LuluXRoblox/LuluXRoblox/refs/heads/main/LuluXGaG/Features/AutoMutate",
+    "https://raw.githubusercontent.com/LuluXRoblox/LuluXRoblox/refs/heads/main/LuluXGaG/Features/AutoBuy",
 }
 task.spawn(function()
     for _, url in ipairs(FEATURES) do
@@ -1020,7 +1064,26 @@ task.spawn(function()
             loadstring(game:HttpGet(url, true))()
         end)
         if not ok then
-            warn("[LuluXGAG] Feature gagal load: " .. url .. "\n" .. tostring(err))
+            warn("[LuluXGAG] Feature failed to load: " .. url .. "\n" .. tostring(err))
         end
     end
+end)
+
+-- ============================================================
+-- SESSION RESTORE — re-activate features that were running
+-- before script was re-executed
+-- ============================================================
+task.spawn(function()
+    task.wait(3)  -- wait for UI + features to fully initialize
+    if State.RestoreAE and tgl.AEStart then
+        pcall(function() tgl.AEStart:SetState(true) end)
+        win:luluNotify("Session restored: Auto Egg restarted", "info")
+    end
+    if State.RestorePnP and tgl.PnPStart then
+        pcall(function() tgl.PnPStart:SetState(true) end)
+        win:luluNotify("Session restored: PnP restarted", "info")
+    end
+    -- Clear restore flags after consuming
+    State.RestoreAE  = false
+    State.RestorePnP = false
 end)
