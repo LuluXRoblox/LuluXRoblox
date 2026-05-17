@@ -292,44 +292,67 @@ local function uuidOf(dn)
 end
 local function petOf(dn) return State.DisplayToPet[dn] end
 
+-- ── Backpack scan — shared untuk PnP & Boost ─────────────────
+-- Format display: "Rainbow Hootsie Roll [0.95 KG]" (tanpa [Age N])
+local bpPets     = {}
+local bpDisplays = {}
+local bpDispMap  = {}
+
+local function scanBPPets()
+    bpPets = {}; bpDisplays = {}; bpDispMap = {}
+    for _, item in ipairs(Backpack:GetChildren()) do
+        local uuid = item:GetAttribute("PET_UUID")
+        if not uuid then continue end
+        local fullName = item.Name
+        local display  = fullName:gsub("%s*%[Age %d+%]",""):match("^%s*(.-)%s*$")
+        local baseName = item:GetAttribute("f") or
+            display:gsub("%s*%[%d+%.?%d* KG%]",""):match("^%s*(.-)%s*$")
+        -- Handle duplicate display names
+        local key = display; local n = 2
+        while bpDispMap[key] do key = display.." ("..n..")"; n=n+1 end
+        bpDispMap[key] = uuid
+        table.insert(bpDisplays, key)
+        table.insert(bpPets, {uuid=uuid, display=key, baseName=baseName})
+    end
+    -- Update boost scan data juga (shared)
+    boost.Displays = bpDisplays
+    boost.DispMap  = bpDispMap
+    boost.ScanMap  = bpDispMap  -- legacy alias
+    return #bpDisplays
+end
+
+local function getBPData() return bpPets, bpDisplays, bpDispMap end
+
 local function rebuildPnPUUIDs()
-    local function scanByNames(nameSet, outUUIDs)
-        -- Backpack
-        for _, item in ipairs(Backpack:GetChildren()) do
-            pcall(function()
-                if not isOwnedByLP(item) then return end
-                local name = item:GetAttribute("f") or parseName(item.Name).base or ""
-                if nameSet[name] then
-                    outUUIDs[item:GetAttribute("PET_UUID") or item.Name] = true
-                end
-            end)
-        end
-        -- ActivePetUI
-        pcall(function()
-            for _, child in ipairs(getPetDisplay():GetChildren()) do
-                if child:IsA("Frame") and child:FindFirstChild("Main") then
-                    local n = child.Main:FindFirstChild("PET_NAME") and child.Main.PET_NAME.Text or ""
-                    if nameSet[n] then outUUIDs[child.Name] = true end
-                end
-            end
-        end)
-        -- Cache persisten — fallback untuk pet yang sedang transisi / baru masuk Active UI
-        for name in pairs(nameSet) do
-            if PnP.UUIDCache[name] then
-                for uuid in pairs(PnP.UUIDCache[name]) do
-                    outUUIDs[uuid] = true
-                end
-            end
+    -- UUID sudah disimpan langsung (OnSkillList / AfterSkillList)
+    -- Tidak perlu name→UUID lookup lagi
+    if #bpDisplays == 0 then scanBPPets() end  -- scan awal kalau belum
+
+    PnP.OnSkillUUIDs = {}
+    for _, uuid in ipairs(PnP.OnSkillList) do
+        PnP.OnSkillUUIDs[uuid] = true
+    end
+
+    PnP.AfterSkillUUIDs = {}
+    for _, uuid in ipairs(PnP.AfterSkillList) do
+        PnP.AfterSkillUUIDs[uuid] = true
+    end
+
+    -- Fallback: legacy name-based (kalau OnSkillList masih kosong tapi OnSkillPets ada)
+    if next(PnP.OnSkillUUIDs) == nil and #PnP.OnSkillPets > 0 then
+        local nameSet = {}
+        for _, n in ipairs(PnP.OnSkillPets) do nameSet[n] = true end
+        for _, p in ipairs(bpPets) do
+            if nameSet[p.baseName] then PnP.OnSkillUUIDs[p.uuid] = true end
         end
     end
-    PnP.OnSkillUUIDs = {}
-    local onSet = {}
-    for _, n in ipairs(PnP.OnSkillPets) do onSet[n] = true end
-    scanByNames(onSet, PnP.OnSkillUUIDs)
-    PnP.AfterSkillUUIDs = {}
-    local aftSet = {}
-    for _, n in ipairs(PnP.AfterSkillPets) do aftSet[n] = true end
-    scanByNames(aftSet, PnP.AfterSkillUUIDs)
+    if next(PnP.AfterSkillUUIDs) == nil and #PnP.AfterSkillPets > 0 then
+        local nameSet = {}
+        for _, n in ipairs(PnP.AfterSkillPets) do nameSet[n] = true end
+        for _, p in ipairs(bpPets) do
+            if nameSet[p.baseName] then PnP.AfterSkillUUIDs[p.uuid] = true end
+        end
+    end
 end
 
 -- ── Rebuild dropdowns after config changes ───────────────────
@@ -393,6 +416,7 @@ end
 
 local function refreshAll()
     scanAll()
+    scanBPPets()   -- scan Backpack untuk PnP + Boost
     State.DisplayKGTarget = {}
     State.DisplayLVTarget = {}
     for _, p in ipairs(State.AllPets) do
@@ -405,9 +429,12 @@ local function refreshAll()
     if ddLV.Target      then ddLV.Target:SetOptions(State.Alldisplay)      end
     KG.Targets       = _savedKG
     LV.ManualTargets = _savedLV
-    if PnP.ddOnSkill    then PnP.ddOnSkill:SetOptions(State.AllPetNames)    end
-    if PnP.ddAfterSkill then PnP.ddAfterSkill:SetOptions(State.AllPetNames) end
-    rebuildPnPUUIDs()
+    -- PnP dropdown sekarang pakai bpDisplays (backpack, bukan AllPetNames)
+    if PnP.ddOnSkill    then PnP.ddOnSkill:SetOptions(bpDisplays)    end
+    if PnP.ddAfterSkill then PnP.ddAfterSkill:SetOptions(bpDisplays) end
+    -- Boost Slot A & B
+    if ddMisc.BoostA then ddMisc.BoostA:SetOptions(bpDisplays) end
+    if ddMisc.BoostB then ddMisc.BoostB:SetOptions(bpDisplays) end
 
     if #boost.SavedUUIDs > 0 then
         doScanBoostPets()
@@ -457,4 +484,6 @@ local PetAPI = {
     unequipList      = unequipList,
     safeEquipLoad    = safeEquipLoad,
     getActivePets    = getActivePets,
+    scanBPPets       = scanBPPets,
+    getBPData        = getBPData,
 }
