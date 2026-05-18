@@ -576,3 +576,183 @@ tabAM:Toggle("Start Auto Mutated", false, function(val)
         win:luluNotify("AutoMutate stopped.", "warn")
     end
 end)
+
+-- ============================================================
+-- LuluXGAG | Auto Buy (Shop tab)
+-- Merged into Feature1 alongside Auto Mutate
+-- ============================================================
+
+local tabShop = win:Tab("Shop")
+
+-- ── Shared state ─────────────────────────────────────────────
+local SelectedItems  = { seed = {}, gear = {}, egg = {} }
+local BuyAllEnabled  = { seed = false, gear = false, egg = false }
+local AutoBuyEnabled = { seed = false, gear = false, egg = false }
+local BuyAllDelay    = 10
+local AutoBuyDelay   = 1
+local buyAllThreads  = {}
+local autoBuyThreads = {}
+
+-- ── Shop remote events ───────────────────────────────────────
+local RS_AB = game:GetService("ReplicatedStorage")
+local GE_AB = RS_AB:FindFirstChild("GameEvents")
+
+local ShopFire = {
+    seed = function(n) pcall(function() GE_AB.BuySeedStock:FireServer(n) end) end,
+    gear = function(n) pcall(function() GE_AB.BuyGearStock:FireServer(n) end) end,
+    egg  = function(n) pcall(function() GE_AB.BuyPetEgg:FireServer(n)   end) end,
+}
+
+-- ── Shop data ────────────────────────────────────────────────
+local ShopData = {
+    seed = {
+        ["Carrot"]=10,["Strawberry"]=50,["Blueberry"]=400,
+        ["Orange Tulip"]=600,["Buttercup"]=600,["Tomato"]=800,
+        ["Daffodil"]=1000,["Corn"]=1300,["Watermelon"]=2500,
+        ["Pumpkin"]=3000,["Apple"]=3250,["Bamboo"]=4000,
+        ["Coconut"]=6000,["Cactus"]=15000,["Dragon Fruit"]=50000,
+        ["Mango"]=100000,["Mushroom"]=150000,["Grape"]=850000,
+        ["Pepper"]=1000000,["Cacao"]=2500000,["Sunflower"]=5555555,
+        ["Beanstalk"]=10000000,["Ember Lily"]=15000000,
+        ["Sugar Apple"]=25000000,["Burning Bud"]=40000000,
+        ["Giant Pinecone"]=55000000,["Elder Strawberry"]=70000000,
+        ["Romanesco"]=10000000000,["Pollenvine"]=2000000000000,
+        ["Crimson Thorn"]=10000000000000,["Zebrazinkle"]=200000000000000,
+        ["Octobloom"]=500000000000000,["Alien Apple"]=1000000000000000,
+    },
+    gear = {
+        ["Basic Sprinkler"]=25000,["Watering Can"]=50000,
+        ["Advanced Sprinkler"]=50000,["Trading Ticket"]=100000,
+        ["Trowel"]=100000,["Godly Sprinkler"]=120000,
+        ["Recall Wrench"]=150000,["Medium Toy"]=4000000,
+        ["Medium Treat"]=4000000,["Pet Name Reroller"]=10000000,
+        ["Magnifying Glass"]=10000000,["Master Sprinkler"]=10000000,
+        ["Cleaning Spray"]=15000000,["Friendship Pot"]=15000000,
+        ["Favorite Tool"]=20000000,["Pet Lead"]=20000000,
+        ["Harvest Tool"]=30000000,["Cleansing Pet Shard"]=30000000,
+        ["Grandmaster Sprinkler"]=1000000000,["Levelup Lollipop"]=10000000000,
+    },
+    egg = {
+        ["Common Egg"]=50000,["Uncommon Egg"]=150000,
+        ["Rare Egg"]=600000,["Legendary Egg"]=3000000,
+        ["Mythical Egg"]=8000000,["Bug Egg"]=50000000,
+        ["Jungle Egg"]=60000000,
+    },
+}
+
+-- ── Helpers ──────────────────────────────────────────────────
+local LP_AB = game:GetService("Players").LocalPlayer
+
+local function GetStock(key, itemName)
+    local count = 0
+    pcall(function()
+        local guiNames = {seed="Seed_Shop", gear="Gear_Shop", egg="PetShop_UI"}
+        local gui = LP_AB:WaitForChild("PlayerGui"):FindFirstChild(guiNames[key])
+        if not gui then return end
+        local sf = gui:FindFirstChild("Frame") and gui.Frame:FindFirstChild("ScrollingFrame")
+        if not sf then return end
+        local frame = sf:FindFirstChild(itemName)
+        if not frame then return end
+        local lbl = frame:FindFirstChild("Main_Frame") and frame.Main_Frame:FindFirstChild("Stock_Text")
+        if not lbl then return end
+        count = tonumber(lbl.Text:match("[Xx]%s*(%d+)")) or tonumber(lbl.Text:match("%d+")) or 0
+    end)
+    return count
+end
+
+local function BuyItem(key, itemName)
+    local n = GetStock(key, itemName)
+    if n <= 0 then return 0 end
+    local fire = ShopFire[key]
+    for _ = 1, n do fire(itemName); task.wait(0.4) end
+    if n > 0 and G.sendWebhook and G.Webhook and G.Webhook.AB then
+        G.sendWebhook({
+            title="Auto Buy",
+            description="Bought **"..n.."x "..itemName.."**",
+            color=0x5865F2,
+        })
+    end
+    return n
+end
+
+local function StopBuyAll(key)  BuyAllEnabled[key]=false;  buyAllThreads[key]=nil  end
+local function StopAutoBuy(key) AutoBuyEnabled[key]=false; autoBuyThreads[key]=nil end
+
+local function StartBuyAll(key)
+    if buyAllThreads[key] then return end
+    BuyAllEnabled[key] = true
+    buyAllThreads[key] = task.spawn(function()
+        while BuyAllEnabled[key] do
+            local total = 0
+            for name in pairs(ShopData[key]) do
+                if not BuyAllEnabled[key] then break end
+                total = total + BuyItem(key, name); task.wait(0.5)
+            end
+            if total > 0 then win:luluNotify("Bought "..total.."x from "..key, "success") end
+            local t=0; while t<BuyAllDelay and BuyAllEnabled[key] do task.wait(1); t=t+1 end
+        end
+        buyAllThreads[key]=nil
+    end)
+end
+
+local function StartAutoBuy(key)
+    if autoBuyThreads[key] then return end
+    AutoBuyEnabled[key] = true
+    autoBuyThreads[key] = task.spawn(function()
+        while AutoBuyEnabled[key] do
+            for _, name in ipairs(SelectedItems[key]) do
+                if not AutoBuyEnabled[key] then break end
+                BuyItem(key, name); task.wait(AutoBuyDelay)
+            end
+            if #SelectedItems[key] == 0 then task.wait(1) end
+        end
+        autoBuyThreads[key]=nil
+    end)
+end
+
+-- ── UI helpers ───────────────────────────────────────────────
+local function ShopSection(key, label)
+    local keys = {}
+    for k in pairs(ShopData[key]) do table.insert(keys, k) end
+    table.sort(keys)
+
+    tabShop:Label("-- " .. label .. " --")
+
+    tabShop:MultiDropdown("Select "..label, keys, {}, function(sel)
+        SelectedItems[key] = sel
+    end)
+
+    tabShop:Toggle("Buy All "..label, false, function(on)
+        if on then StartBuyAll(key) else StopBuyAll(key) end
+    end)
+
+    tabShop:Toggle("Auto Buy "..label, false, function(on)
+        if on then
+            if #SelectedItems[key]==0 then win:luluNotify("Select items first!","warning"); return end
+            StartAutoBuy(key)
+        else StopAutoBuy(key) end
+    end)
+
+    tabShop:Button("Buy Selected Now", function()
+        if #SelectedItems[key]==0 then win:luluNotify("Select items first!","warning"); return end
+        task.spawn(function()
+            local total=0
+            for _, name in ipairs(SelectedItems[key]) do total=total+BuyItem(key,name) end
+            win:luluNotify("Bought total x"..total, "success")
+        end)
+    end)
+end
+
+-- ── Build Shop tab (flat — no Accordion) ─────────────────────
+ShopSection("seed", "Seed Shop")
+ShopSection("gear", "Gear Shop")
+ShopSection("egg",  "Egg Shop")
+
+tabShop:Label("-- Settings --")
+tabShop:NumberInput("Buy All Delay (s)",  10,  1, 1,  60, function(v) BuyAllDelay  = v end)
+tabShop:NumberInput("Auto Buy Delay (s)", 1, 0.5, 0.5,30, function(v) AutoBuyDelay = v end)
+
+tabShop:Button("Stop All Buying", function()
+    for _, k in ipairs({"seed","gear","egg"}) do StopBuyAll(k); StopAutoBuy(k) end
+    win:luluNotify("All auto buy stopped", "warning")
+end)
