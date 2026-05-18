@@ -254,7 +254,7 @@ end
 local function processMutation(petUUID)
     -- 1. Pegang pet target di tangan
     if not holdPet(petUUID) then
-        win:luluNotify("AutoMutate: Gagal pegang pet!", "error")
+        win:luluNotify("AutoMutate: Failed to hold pet!", "error")
         return false
     end
 
@@ -324,7 +324,7 @@ local function updateInfoPanel()
                     waiting      = "waiting",
                     leveling     = "on progress",
                     wait_mutation = "wait mutation",
-                    done         = "done ✓",
+                    done         = "done",
                 })[p.status] or p.status
                 grp.AMAll:QuestLine(p.name, s)
             end
@@ -339,11 +339,11 @@ end
 -- ============================================================
 local function autoMutateLoop()
     if not initRefs() then
-        win:luluNotify("AutoMutate: Mesin tidak ditemukan!", "error")
+        win:luluNotify("AutoMutate: Machine not found!", "error")
         AutoMutate.running = false; return
     end
 
-    win:luluNotify("AutoMutate dimulai...", "info")
+    win:luluNotify("AutoMutate started...", "info")
     AutoMutate.doneCount = 0
 
     local helperUUIDs = {}
@@ -369,7 +369,7 @@ local function autoMutateLoop()
 
     while AutoMutate.running and AutoMutate.doneCount < needed do
         if #AutoMutate.targetUUIDs == 0 then
-            win:luluNotify("Belum pilih pet target!", "warn"); break
+            win:luluNotify("No target pet selected!", "warn"); break
         end
 
         local uuid = AutoMutate.targetUUIDs[petIdx]
@@ -388,7 +388,7 @@ local function autoMutateLoop()
             for _, p in ipairs(amPetList) do if p.uuid == uuid then petInfo = p; break end end
         end
         if not petInfo then
-            win:luluNotify("Pet tidak ada di backpack, skip!", "warn")
+            win:luluNotify("Pet not found in backpack, skipping!", "warn")
             task.wait(1); continue
         end
 
@@ -427,7 +427,7 @@ local function autoMutateLoop()
             amProgress[uuid].timer  = "..."
             updateInfoPanel()
 
-            win:luluNotify("Age 50! Masuk mesin...", "info")
+            win:luluNotify("Age 50! Entering machine...", "info")
             local ok = processMutation(uuid)
             if not ok then break end
 
@@ -454,7 +454,7 @@ local function autoMutateLoop()
             amProgress[uuid].mutation = newName ~= "" and newName or "NOMUT"
             amProgress[uuid].timer    = "-"
 
-            win:luluNotify("Nama sekarang: " .. (newName ~= "" and newName or "?"), "info")
+            win:luluNotify("Name now: " .. (newName ~= "" and newName or "?"), "info")
 
             -- Cek apakah salah satu target mutation ada dalam nama
             -- Contoh: "Rainbow" in "Rainbow Ruby" → true
@@ -476,7 +476,7 @@ local function autoMutateLoop()
                 amProgress[uuid].status = "done"
                 updateInfoPanel()
                 pet.safeEquipLoad({})
-                win:luluNotify("✓ " .. baseName .. " → " .. newName
+                win:luluNotify("[done] " .. baseName .. " → " .. newName
                     .. " [" .. AutoMutate.doneCount .. "/" .. needed .. "]", "success")
             else
                 -- Belum done → langsung equip helpers, ulangi leveling
@@ -485,7 +485,7 @@ local function autoMutateLoop()
                 updateInfoPanel()
                 local ts = #AutoMutate.targetMutations > 0
                     and table.concat(AutoMutate.targetMutations, "/") or "any"
-                win:luluNotify("Bukan target (" .. ts .. "), equip helper lanjut...", "warn")
+                win:luluNotify("Not a target mutation (" .. ts .. "), equipping helpers, continuing...", "warn")
                 -- Pet sudah di garden, safeEquipLoad([uuid,helpers]) di atas loop
             end
         end
@@ -540,7 +540,7 @@ end)
 tabAM:Toggle("Start Auto Mutated", false, function(val)
     if val then
         if #AutoMutate.targetUUIDs == 0 then
-            win:luluNotify("Pilih pet target dulu!", "error"); return
+            win:luluNotify("Select a target pet first!", "error"); return
         end
         AutoMutate.running   = true
         AutoMutate.doneCount = 0
@@ -549,6 +549,6 @@ tabAM:Toggle("Start Auto Mutated", false, function(val)
         AutoMutate.running = false
         if AutoMutate.thread then task.cancel(AutoMutate.thread); AutoMutate.thread = nil end
         grp.AMInfo:Hide(); grp.AMAll:Hide()
-        win:luluNotify("AutoMutate dihentikan.", "warn")
+        win:luluNotify("AutoMutate stopped.", "warn")
     end
 end)
