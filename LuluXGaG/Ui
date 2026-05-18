@@ -1043,8 +1043,7 @@ _G.LGAG = {
 
 -- Load feature files dari GitHub (non-blocking)
 local FEATURES = {
-    "https://raw.githubusercontent.com/LuluXRoblox/LuluXRoblox/refs/heads/main/LuluXGaG/Features/AutoMutate",
-    "https://raw.githubusercontent.com/LuluXRoblox/LuluXRoblox/refs/heads/main/LuluXGaG/Features/AutoBuy",
+    "https://raw.githubusercontent.com/LuluXRoblox/LuluXRoblox/refs/heads/main/LuluXGaG/Features/Feature1",
 }
 task.spawn(function()
     for _, url in ipairs(FEATURES) do
