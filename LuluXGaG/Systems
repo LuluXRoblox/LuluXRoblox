@@ -346,25 +346,7 @@ doScanBoostPets = function()
     return #boost.Displays
 end
 
-local function startBoostLoop()
-    local uuids = #boost.UUIDs > 0 and boost.UUIDs or {}
-    if #uuids == 0 then boost.Running = false; return end
-    boost.MonitorUUID   = nil
-    boost.SmallPending  = false
-    boost.MediumPending = false
-    boost.Thread        = nil
-    boost.Monitors      = {}
-    -- Apply only to UUIDs where boost has expired (or never applied)
-    task.spawn(function()
-        for _, uuid in ipairs(uuids) do
-            if not boost.Running then return end
-            if not boost.ActiveBoosts[uuid] then
-                pcall(function() applyBoostDirect(uuid) end)
-                task.wait(0.3)
-            end
-        end
-    end)
-end
+
 
 local function boostIsUUIDActive(uuid)
     local found = false
@@ -379,25 +361,37 @@ local function boostIsUUIDActive(uuid)
 end
 
 local function startBoostLoop()
-    local uuids = getBoostSelectedUUIDs()
-    if #uuids == 0 then boost.Running = false; return end
+    -- Use all selected UUIDs (not just expired) for monitor init
+    local allUUIDs = boost.UUIDs
+    if #allUUIDs == 0 then
+        allUUIDs = {}
+        for _, disp in ipairs(boost.Selected) do
+            local uuid = boost.ScanMap[disp]
+            if uuid then table.insert(allUUIDs, uuid) end
+        end
+    end
+    if #allUUIDs == 0 then boost.Running = false; return end
+
     boost.MonitorUUID   = nil
     boost.SmallPending  = false
     boost.MediumPending = false
     boost.Thread        = nil
-    -- Init Monitors per pet
+    -- Init Monitors for ALL selected UUIDs (needed for DataStream re-apply)
     boost.Monitors = {}
-    for _, uuid in ipairs(uuids) do
+    for _, uuid in ipairs(allUUIDs) do
         boost.Monitors[uuid] = { small = nil, medium = nil }
     end
-    -- Apply langsung ke semua UUID saat pertama kali start
+    -- Apply only to UUIDs whose boost has expired (or never applied)
     task.spawn(function()
-        for _, uuid in ipairs(uuids) do
+        for _, uuid in ipairs(allUUIDs) do
             if not boost.Running then return end
-            pcall(function() applyBoostDirect(uuid) end)
+            if not boost.ActiveBoosts[uuid] then
+                pcall(function() applyBoostDirect(uuid) end)
+                task.wait(0.3)
+            end
         end
     end)
-    -- Re-apply otomatis ditangani DataStream listener di bawah
+    -- Re-apply handled automatically by DataStream listener
 end
 
 -- ============================================================
@@ -1873,35 +1867,40 @@ end)
 -- Also handles PnP overflow detection.
 -- ============================================================
 
--- PnP overflow fix: called when server says "max pets equipped"
+-- PnP overflow fix: when 8/8 fires, a Load B pet failed to equip
+-- because a Load A pet is still occupying its slot.
+-- Fix: unequip Load A intruder → equip the Load B pet that failed.
 local function fixPnPOverflow()
     if not PnP.Running then return end
     task.spawn(function()
         task.wait(0.5)
-        -- Build expected UUID set (OnSkill + AfterSkill)
-        local expectedSet = {}
-        for uuid in pairs(PnP.OnSkillUUIDs)    do expectedSet[uuid] = true end
-        for uuid in pairs(PnP.AfterSkillUUIDs) do expectedSet[uuid] = true end
-
-        -- Build active UUID set from ActivePetUI
-        local activeSet = {}
         local activeList = getActivePets()
+        local activeSet  = {}
         for _, p in ipairs(activeList) do activeSet[p.uuid] = true end
 
-        -- Unequip pets that are active but NOT in expected set
-        for uuid in pairs(activeSet) do
-            if not expectedSet[uuid] then
-                pcall(function() unequipPet(uuid) end)
-                task.wait(0.25)
-            end
+        -- Load A (OnSkill) pets that are currently active
+        local activeA = {}
+        for uuid in pairs(PnP.OnSkillUUIDs) do
+            if activeSet[uuid] then table.insert(activeA, uuid) end
         end
 
-        -- Equip expected pets that are NOT currently active
-        for uuid in pairs(expectedSet) do
-            if not activeSet[uuid] then
-                pcall(function() equipPet(uuid) end)
-                task.wait(0.3)
-            end
+        -- Load B (AfterSkill) pets NOT yet active (failed to equip)
+        local missingB = {}
+        for uuid in pairs(PnP.AfterSkillUUIDs) do
+            if not activeSet[uuid] then table.insert(missingB, uuid) end
+        end
+
+        if #missingB == 0 then return end  -- nothing to fix
+
+        -- Swap: unequip Load A → equip missing Load B
+        local swaps = math.min(#activeA, #missingB)
+        for i = 1, swaps do
+            pcall(function() unequipPet(activeA[i]) end);  task.wait(0.3)
+            pcall(function() equipPet(missingB[i]) end);   task.wait(0.3)
+        end
+        -- If more Load B missing and no Load A to swap, try direct equip
+        for i = swaps + 1, #missingB do
+            pcall(function() equipPet(missingB[i]) end);   task.wait(0.3)
         end
     end)
 end
