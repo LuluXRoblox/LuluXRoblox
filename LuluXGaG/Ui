@@ -583,9 +583,10 @@ tab.Main:Accordion("Pick & Place Pets", function(sec)
 end)
 
 tab.Main:Accordion("Auto Toy Boost", function(sec)
-    -- Slot A — aktif boost (UUID disimpan langsung, tidak perlu rescan)
-    ddMisc.BoostA = sec:MultiDropdown("Slot A", bpDisplays, {}, function(sel)
-        boost.UUIDs = {}
+    -- Single dropdown — all selected pets get boosted when their toy expires
+    ddMisc.BoostA = sec:MultiDropdown("Select Pets", bpDisplays, {}, function(sel)
+        boost.UUIDs        = {}
+        boost.ActiveBoosts = {}  -- reset expiry tracking
         for _, disp in ipairs(sel) do
             local uuid = bpDispMap[disp]
             if uuid then table.insert(boost.UUIDs, uuid) end
@@ -593,27 +594,11 @@ tab.Main:Accordion("Auto Toy Boost", function(sec)
         saveSettings()
     end)
 
-    -- Slot B — pre-cached, switch tanpa rescan
-    ddMisc.BoostB = sec:MultiDropdown("Slot B", bpDisplays, {}, function(sel)
-        boost.UUIDsB = {}
-        for _, disp in ipairs(sel) do
-            local uuid = bpDispMap[disp]
-            if uuid then table.insert(boost.UUIDsB, uuid) end
-        end
-        saveSettings()
-    end)
-
-    -- Toggle aktif slot
-    sec:Toggle("Use Slot B", false, function(on)
-        boost.ActiveSlot = on and "B" or "A"
-        win:luluNotify("Boost active slot: "..boost.ActiveSlot, "info")
-    end)
-
     sec:Dropdown("Select Toy", {"Both","Small","Medium"}, boost.ToyMode, function(sel) boost.ToyMode=sel; saveSettings() end)
     sec:Button("Apply Once", function()
-        local uuids=getBoostSelectedUUIDs()
-        if #uuids==0 then win:luluNotify("Select pets in Slot A/B first!", "warning"); return end
-        if not findBoostTool("Small") and not findBoostTool("Medium") then win:luluNotify("No toy!", "warning"); return end
+        local uuids=boost.UUIDs
+        if #uuids==0 then win:luluNotify("Select pets first!", "warning"); return end
+        if not findBoostTool("Small") and not findBoostTool("Medium") then win:luluNotify("No toy in backpack!", "warning"); return end
         win:luluNotify("Applying to "..#uuids.." pet(s)...", "info")
         task.spawn(function()
             for _, uuid in ipairs(uuids) do pcall(function() applyBoostDirect(uuid) end) end
@@ -623,7 +608,7 @@ tab.Main:Accordion("Auto Toy Boost", function(sec)
     sec:Toggle("Auto Boost", false, function(on)
         boost.Running=on
         if on then
-            local uuids=getBoostSelectedUUIDs()
+            local uuids=boost.UUIDs
             if #uuids==0 then boost.Running=false; return end
             if not findBoostTool("Small") and not findBoostTool("Medium") then boost.Running=false; return end
             startBoostLoop()
@@ -1078,15 +1063,32 @@ end)
 -- ============================================================
 task.spawn(function()
     task.wait(3)  -- wait for UI + features to fully initialize
+    local restored = {}
+
+    if State.RestoreKG and tgl.KGStart then
+        pcall(function() tgl.KGStart:SetState(true) end)
+        table.insert(restored, "Auto KG")
+    end
+    if State.RestoreLV and tgl.LVStart then
+        pcall(function() tgl.LVStart:SetState(true) end)
+        table.insert(restored, "Auto LV")
+    end
     if State.RestoreAE and tgl.AEStart then
         pcall(function() tgl.AEStart:SetState(true) end)
-        win:luluNotify("Session restored: Auto Egg restarted", "info")
+        table.insert(restored, "Auto Egg")
     end
     if State.RestorePnP and tgl.PnPStart then
         pcall(function() tgl.PnPStart:SetState(true) end)
-        win:luluNotify("Session restored: PnP restarted", "info")
+        table.insert(restored, "PnP")
     end
-    -- Clear restore flags after consuming
+
+    if #restored > 0 then
+        win:luluNotify("Session restored: " .. table.concat(restored, ", "), "info")
+    end
+
+    -- Clear restore flags
     State.RestoreAE  = false
     State.RestorePnP = false
+    State.RestoreKG  = false
+    State.RestoreLV  = false
 end)
