@@ -464,7 +464,7 @@ tab.Main:Accordion("Setup", function(sec)
         else
             refreshAll()
             local eq=0; for _ in pairs(State.EquippedUUIDs) do eq=eq+1 end
-            win:luluNotify("Scan DONE! "..#State.AllPets.." total | "..eq.." equipped [★]", "success")
+            win:luluNotify("Scan DONE! "..#State.AllPets.." total | "..eq.." equipped", "success")
         end
     end)
     sec:Toggle("Always Open GUI", false, function(on) setAlwaysOpen(on) end)
@@ -612,7 +612,7 @@ tab.Main:Accordion("Auto Toy Boost", function(sec)
     sec:Dropdown("Select Toy", {"Both","Small","Medium"}, boost.ToyMode, function(sel) boost.ToyMode=sel; saveSettings() end)
     sec:Button("Apply Once", function()
         local uuids=getBoostSelectedUUIDs()
-        if #uuids==0 then win:luluNotify("Pilih pet di Slot A/B dulu!", "warning"); return end
+        if #uuids==0 then win:luluNotify("Select pets in Slot A/B first!", "warning"); return end
         if not findBoostTool("Small") and not findBoostTool("Medium") then win:luluNotify("No toy!", "warning"); return end
         win:luluNotify("Applying to "..#uuids.." pet(s)...", "info")
         task.spawn(function()
@@ -723,7 +723,7 @@ tab.Main:Accordion("Auto Egg", function(sec)
         getEggPetNamesForChosen(), AutoEgg.GoodHatchPets,
         function(sel) AutoEgg.GoodHatchPets=sel; saveSettings() end
     )
-    sec:Label("Pets di sini selalu Good Hatch walaupun KG tidak mencukupi Min Good Hatch", {size=10,color=Color3.fromRGB(160,160,180)})
+    sec:Label("Pets here always use Good Hatch regardless of KG weight", {size=10,color=Color3.fromRGB(160,160,180)})
 
     tgl.AEStart = sec:Toggle("Auto Hatch", false, function(on)
         if on then startAutoEgg() else stopAutoEgg() end
@@ -1051,6 +1051,9 @@ _G.LGAG = {
     getConfigUUIDs = getConfigUUIDs,
     getConfigsByType = getConfigsByType,
     grp            = grp,
+    Webhook        = Webhook,
+    sendWebhook    = sendWebhookEmbed,
+    AEStats        = AEStats,
 }
 
 -- Load feature files dari GitHub (non-blocking)
