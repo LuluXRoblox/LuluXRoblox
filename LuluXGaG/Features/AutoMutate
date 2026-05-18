@@ -13,8 +13,34 @@ local grp              = G.grp   -- info panel groups
 local Players    = game:GetService("Players")
 local GuiService = game:GetService("GuiService")
 local VIM        = game:GetService("VirtualInputManager")
+local RS         = game:GetService("ReplicatedStorage")
 local LP         = Players.LocalPlayer
 local Backpack   = LP.Backpack
+
+-- Mutation result from Notification event
+-- Pattern: "<font...>PetName</font> mutated into <font...>MutationType</font>"
+local mutResult = { pending = false, petName = "", mutation = "" }
+local mutNotifConn = nil
+
+local function connectMutNotif()
+    if mutNotifConn then return end
+    local GE = RS:FindFirstChild("GameEvents")
+    if not GE then return end
+    local notif = GE:FindFirstChild("Notification")
+    if not notif then return end
+    mutNotifConn = notif.OnClientEvent:Connect(function(msg)
+        if type(msg) ~= "string" then return end
+        -- Strip HTML tags
+        local stripped = msg:gsub("<[^>]+>", ""):match("^%s*(.-)%s*$")
+        -- Match "PetName mutated into MutationType"
+        local petName, mutType = stripped:match("^(.+) mutated into (.+)$")
+        if petName and mutType then
+            mutResult.pending  = true
+            mutResult.petName  = petName:match("^%s*(.-)%s*$")
+            mutResult.mutation = mutType:match("^%s*(.-)%s*$")
+        end
+    end)
+end
 
 -- ============================================================
 -- MUTATIONS
@@ -167,8 +193,9 @@ local function initRefs()
         if not bp then error("no BillboardPart") end
         timerLabel = bp:WaitForChild("BillboardGui",15):WaitForChild("TimerTextLabel",15)
     end)
-    if not ok2 then warn("[AutoMutate] TimerTextLabel TIDAK DITEMUKAN!") end
+    if not ok2 then warn("[AutoMutate] TimerTextLabel not found!") end
 
+    connectMutNotif()   -- connect mutation result listener
     return ok1 and ok2
 end
 
@@ -252,36 +279,53 @@ local function holdPet(petUUID)
 end
 
 local function processMutation(petUUID)
-    -- 1. Pegang pet target di tangan
+    -- 1. Hold target pet in hand
     if not holdPet(petUUID) then
         win:luluNotify("AutoMutate: Failed to hold pet!", "error")
-        return false
+        return false, ""
     end
 
-    -- 2. Buka mesin → confirm → submit
+    -- 2. Open machine -> confirm -> submit
     fireproximityprompt(proxPrompt); task.wait(3)
     clickConfirm();                   task.wait(0.5)
     fireproximityprompt(proxPrompt); task.wait(1)
 
-    -- 3. Mesin mulai → equip reduce helpers
+    -- 3. Machine running -> equip reduce helpers
     if AutoMutate.reduceConfigName ~= "" then loadReduceLoadout() end
 
-    -- 4. Tunggu timer selesai
+    -- 4. Wait for timer
     if not waitTimerReady(petUUID, 300) then
         win:luluNotify("AutoMutate: Timer timeout!", "error")
-        return false
+        return false, ""
     end
 
-    -- 5. Timer done → lepas yang dipegang setelah 10 detik
+    -- 5. Release held pet after 10s
     task.wait(10)
     local ch  = LP.Character
     local hum = ch and ch:FindFirstChildOfClass("Humanoid")
     if hum then pcall(function() hum:UnequipTools() end) end
     pet.safeEquipLoad({}); task.wait(0.5)
 
-    -- 6. Ambil hasil dari mesin
-    fireproximityprompt(proxPrompt); task.wait(3)
-    return true
+    -- 6. Claim mutation result via FireServer
+    mutResult.pending = false
+    local GE = RS:FindFirstChild("GameEvents")
+    local mutSvc = GE and GE:FindFirstChild("PetMutationMachineService_RE")
+    if mutSvc then
+        pcall(function() mutSvc:FireServer("ClaimMutatedPet") end)
+    else
+        fireproximityprompt(proxPrompt)  -- fallback
+    end
+
+    -- 7. Wait for mutation notification (max 8s)
+    local t = 0
+    while t < 8 and not mutResult.pending and AutoMutate.running do
+        task.wait(0.5); t = t + 0.5
+    end
+
+    local mutation = mutResult.pending and mutResult.mutation or ""
+    mutResult.pending = false
+    task.wait(0.5)
+    return true, mutation
 end
 
 -- ============================================================
@@ -428,65 +472,45 @@ local function autoMutateLoop()
             updateInfoPanel()
 
             win:luluNotify("Age 50! Entering machine...", "info")
-            local ok = processMutation(uuid)
+            local ok, mutation = processMutation(uuid)
             if not ok then break end
 
-            -- === CEK HASIL — place di garden, baca nama ===
-            -- Equip pet target ke garden untuk baca nama hasil mutasi
-            pet.safeEquipLoad({ uuid }); task.wait(2)
-
-            -- Baca PET_NAME dari ActivePetUI (nama setelah mutasi, e.g. "Rainbow Ruby")
-            local newName = ""
-            pcall(function()
-                local display = pet.getPetDisplay()
-                for _, child in ipairs(display:GetChildren()) do
-                    if not child:IsA("Frame") then continue end
-                    local m = child:FindFirstChild("Main")
-                    if not m then continue end
-                    local nameL = m:FindFirstChild("PET_NAME")
-                    if nameL and nameL.Text:find(baseAttr, 1, true) then
-                        newName = nameL.Text  -- e.g. "Rainbow Ruby"
-                        break
-                    end
-                end
-            end)
-
-            amProgress[uuid].mutation = newName ~= "" and newName or "NOMUT"
+            -- Mutation result from Notification event (no backpack/garden scan needed)
+            local mutLabel = (mutation ~= "") and mutation or "NOMUT"
+            amProgress[uuid].mutation = mutLabel
             amProgress[uuid].timer    = "-"
 
-            win:luluNotify("Name now: " .. (newName ~= "" and newName or "?"), "info")
+            win:luluNotify("Result: " .. mutLabel .. " (" .. baseName .. ")", "info")
 
-            -- Cek apakah salah satu target mutation ada dalam nama
-            -- Contoh: "Rainbow" in "Rainbow Ruby" → true
+            -- Check if any target mutation is contained in the result
+            -- e.g. target = "Rainbow", result = "Rainbow" -> hit
             local targetHit = false
             if #AutoMutate.targetMutations == 0 then
-                targetHit = (newName ~= "" and newName ~= baseAttr)
+                targetHit = (mutation ~= "")
             else
                 for _, tm in ipairs(AutoMutate.targetMutations) do
-                    if newName:lower():find(tm:lower(), 1, true) then
+                    if mutation:lower():find(tm:lower(), 1, true) then
                         targetHit = true; break
                     end
                 end
             end
 
             if targetHit then
-                -- Done! Unequip, lanjut ke pet berikutnya
                 petDone = true
                 AutoMutate.doneCount += 1
                 amProgress[uuid].status = "done"
                 updateInfoPanel()
                 pet.safeEquipLoad({})
-                win:luluNotify("[done] " .. baseName .. " → " .. newName
+                win:luluNotify("[done] " .. baseName .. " -> " .. mutation
                     .. " [" .. AutoMutate.doneCount .. "/" .. needed .. "]", "success")
             else
-                -- Belum done → langsung equip helpers, ulangi leveling
-                amProgress[uuid].status = "leveling"
+                -- Not target -> equip helpers, retry leveling
+                amProgress[uuid].status   = "leveling"
                 amProgress[uuid].mutation = ""
                 updateInfoPanel()
                 local ts = #AutoMutate.targetMutations > 0
                     and table.concat(AutoMutate.targetMutations, "/") or "any"
-                win:luluNotify("Not a target mutation (" .. ts .. "), equipping helpers, continuing...", "warn")
-                -- Pet sudah di garden, safeEquipLoad([uuid,helpers]) di atas loop
+                win:luluNotify("Not target (" .. ts .. "), retry leveling...", "warn")
             end
         end
 
