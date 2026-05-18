@@ -236,7 +236,6 @@ local function BuildShop(sec, key, label)
         SelectedItems[key] = selected
     end)
 
-    sec:Divider()
 
     -- Stock info (live)
     local stockLabel = sec:Label("Stock: —")
@@ -289,23 +288,20 @@ tabAB:Accordion("Seed Shop", function(sec)  BuildShop(sec, "seed", "Seed") end)
 tabAB:Accordion("Gear Shop", function(sec)  BuildShop(sec, "gear", "Gear") end)
 tabAB:Accordion("Egg Shop",  function(sec)  BuildShop(sec, "egg",  "Egg")  end)
 
--- ============================================================
--- MISC CONTROLS
--- ============================================================
-tabAB:Separator("Settings")
+tabAB:Accordion("Settings", function(sec)
+    sec:NumberInput("Buy All Delay (s)",  10,  1,   1,  60, function(v) BuyAllDelay  = v end)
+    sec:NumberInput("Auto Buy Delay (s)", 1,   0.5, 0.5, 30, function(v) AutoBuyDelay = v end)
 
-tabAB:NumberInput("Buy All Delay (s)",  10,  1,   1,  60, function(v) BuyAllDelay  = v end)
-tabAB:NumberInput("Auto Buy Delay (s)", 1,   0.5, 0.5, 30, function(v) AutoBuyDelay = v end)
+    sec:Button("Stop All", function()
+        for _, key in ipairs({"seed","gear","egg"}) do
+            StopBuyAll(key)
+            StopAutoBuy(key)
+        end
+        win:luluNotify("All auto buy stopped", "warning")
+    end)
 
-tabAB:Button("Stop All", function()
-    for _, key in ipairs({"seed","gear","egg"}) do
-        StopBuyAll(key)
-        StopAutoBuy(key)
-    end
-    win:luluNotify("All auto buy stopped", "warning")
-end)
-
-tabAB:Button("Reset Stats", function()
-    ABStats.seed = 0; ABStats.gear = 0; ABStats.egg = 0
-    win:luluNotify("Stats reset", "info")
+    sec:Button("Reset Stats", function()
+        ABStats.seed = 0; ABStats.gear = 0; ABStats.egg = 0
+        win:luluNotify("Stats reset", "info")
+    end)
 end)
