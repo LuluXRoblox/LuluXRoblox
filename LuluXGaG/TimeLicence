@@ -157,7 +157,7 @@ if fCount == 4 then
         return
     end
 elseif fCount == 3 then
-    licenceTag = entTag          -- e.g. "Developer", "TimDev"
+    licenceTag = entTag
     expireUnix = math.huge
     expireText = entTag
 end
