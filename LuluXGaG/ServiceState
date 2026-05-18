@@ -114,6 +114,8 @@ local State = {
     -- Session restore flags (set by loadSettings, consumed after UI init)
     RestoreAE         = false,
     RestorePnP        = false,
+    RestoreKG         = false,
+    RestoreLV         = false,
     DisplayKGTarget   = {},
     DisplayLVTarget   = {},
     OthersLoadoutUUIDs = {},
@@ -163,6 +165,8 @@ local boost = {
     UUIDs         = {},    -- Slot A: {uuid,...}
     UUIDsB        = {},    -- Slot B: {uuid,...}
     ActiveSlot    = "A",
+    -- Track which UUIDs currently have active boost (toy not expired)
+    ActiveBoosts  = {},    -- {[uuid] = true} if boost still running
     -- Scan data shared dengan PnP
     Displays      = {},    DispMap       = {},
     -- Legacy
