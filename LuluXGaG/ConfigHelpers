@@ -93,4 +93,3 @@ local function buildDisplay(petName, kg, age)
     if age then s = s .. " [Age " .. age .. "]" end
     return s
 end
-n
