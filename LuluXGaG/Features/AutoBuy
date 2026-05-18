@@ -3,8 +3,11 @@
 -- Version: LuluXZeaGaG[release][V1]
 -- ============================================================
 
-local G   = _G.LGAG
-local win = G.win
+local G           = _G.LGAG
+local win         = G.win
+local Webhook     = G.Webhook
+local sendWebhook = G.sendWebhook
+local SCRIPT_VERSION = "LuluXZeaGaG[release][V1]"
 
 local RS      = game:GetService("ReplicatedStorage")
 local Players = game:GetService("Players")
@@ -125,6 +128,10 @@ local function BuyByStock(key, itemName)
         fireFn(itemName)
         task.wait(0.4)
     end
+    if count > 0 then
+        ABStats[key] = ABStats[key] + count
+        sendABWebhook(itemName, count, key)
+    end
     return count
 end
 
@@ -142,12 +149,16 @@ local autoBuyThreads = {}
 -- Stats for info panel
 local ABStats = { seed = 0, gear = 0, egg = 0 }
 
-local function sendABWebhook(label, itemName, count)
-    if not G.State then return end
-    -- Access Webhook via _G.LGAG bridge
-    local wh = rawget(_G, "LGAG_Webhook")  -- set from main script
-    -- Fallback: just notify
-    win:luluNotify("Bought " .. count .. "x " .. itemName, "success")
+local function sendABWebhook(itemName, count, shopType)
+    if not Webhook or not Webhook.AB then return end
+    if not sendWebhook then return end
+    sendWebhook({
+        title       = "Auto Buy — " .. shopType,
+        description = "Bought **" .. count .. "x " .. itemName .. "**",
+        color       = 0x5865F2,
+        footer      = { text = "LuluXGAG " .. SCRIPT_VERSION },
+        timestamp   = os.date("!%Y-%m-%dT%H:%M:%S"),
+    })
 end
 
 local function StartBuyAll(key)
@@ -160,7 +171,6 @@ local function StartBuyAll(key)
                 if not BuyAllEnabled[key] then break end
                 local n = BuyByStock(key, itemName)
                 total = total + n
-                ABStats[key] = ABStats[key] + n
                 task.wait(0.5)
             end
             if total > 0 then
@@ -187,8 +197,7 @@ local function StartAutoBuy(key)
             if #list == 0 then task.wait(1); continue end
             for _, name in ipairs(list) do
                 if not AutoBuyEnabled[key] then break end
-                local n = BuyByStock(key, name)
-                ABStats[key] = ABStats[key] + n
+                BuyByStock(key, name)
                 task.wait(AutoBuyDelay)
             end
         end
@@ -256,9 +265,7 @@ local function BuildShop(sec, key, label)
         task.spawn(function()
             local total = 0
             for _, name in ipairs(list) do
-                local n = BuyByStock(key, name)
-                total = total + n
-                ABStats[key] = ABStats[key] + n
+                total = total + BuyByStock(key, name)
             end
             win:luluNotify("Bought total x" .. total, "success")
         end)
