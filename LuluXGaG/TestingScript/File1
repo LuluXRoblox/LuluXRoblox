@@ -1,1 +1,1057 @@
-yes
+-- ============================================================
+-- LuluXGAG | Part 1: Time Sync + Licence System
+-- ============================================================
+-- ============================================================
+-- ============================================================
+local player  = game.Players.LocalPlayer
+local UTC_OFFSET  = 7 * 3600
+local MONTHS_LBL  = {"Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"}
+
+local DAYS_IN_MONTH = {31,28,31,30,31,30,31,31,30,31,30,31}
+local function isLeap(y) return (y%4==0 and y%100~=0) or y%400==0 end
+local function toUnix(y, mo, d, h, m, s)
+    local days = 0
+    for yr = 1970, y - 1 do
+        days = days + (isLeap(yr) and 366 or 365)
+    end
+    local dim = {table.unpack(DAYS_IN_MONTH)}
+    if isLeap(y) then dim[2] = 29 end
+    for i = 1, mo - 1 do days = days + dim[i] end
+    days = days + d - 1
+    return days * 86400 + h * 3600 + m * 60 + (s or 0)
+end
+
+local function getServerUnix()
+    local ok, res = pcall(game.HttpGet, game,
+        "https://timeapi.io/api/time/current/zone?timeZone=UTC")
+    if not ok then return nil end
+    local yr,mo,dy,h,m,s = res:match('"dateTime":"(%d+)-(%d+)-(%d+)T(%d+):(%d+):(%d+)')
+    if not yr then return nil end
+    return toUnix(tonumber(yr),tonumber(mo),tonumber(dy),
+                  tonumber(h),tonumber(m),tonumber(s)) + UTC_OFFSET
+end
+
+local function parseDuration(str)
+    local secs = 0
+    for num, unit in str:gmatch("(%d+)([HhDdWwMm])") do
+        num = tonumber(num); local u = unit:upper()
+        if     u == "H" then secs = secs + num * 3600
+        elseif u == "D" then secs = secs + num * 86400
+        elseif u == "W" then secs = secs + num * 604800
+        elseif u == "M" then secs = secs + num * 2592000
+        end
+    end
+    return secs
+end
+
+local function parseDateUnix(dateStr)
+    local h, m, d, mo, y = dateStr:match("(%d+):(%d+)%s+(%d+)/(%d+)/(%d+)")
+    if not h then return nil end
+    return toUnix(tonumber(y),tonumber(mo),tonumber(d),
+                  tonumber(h),tonumber(m),0)
+end
+
+local function formatRemaining(secs)
+    if secs == math.huge or secs >= 1e15 then return "Permanent" end
+    if secs <= 0 then return "Expired" end
+    if secs < 60 then return math.floor(secs) .. "s remaining" end
+    local parts = {}
+    local mo = math.floor(secs/2592000); secs = secs%2592000
+    local w  = math.floor(secs/604800);  secs = secs%604800
+    local d  = math.floor(secs/86400);   secs = secs%86400
+    local h  = math.floor(secs/3600);    secs = secs%3600
+    local m  = math.floor(secs/60)
+    if mo>0 then table.insert(parts, mo.."M") end
+    if w >0 then table.insert(parts, w .."W") end
+    if d >0 then table.insert(parts, d .."D") end
+    if h >0 then table.insert(parts, h .."H") end
+    if m >0 then table.insert(parts, m .."min") end
+    return table.concat(parts," ") .. " remaining"
+end
+
+local displayName    = ""
+local expireUnix     = 0
+local nowUnix        = 0
+local syncedAt       = 0
+local isPromo        = false
+local licenceTag     = nil    -- must be declared before refreshExpireText closure
+
+local function currentUnix()
+    return math.floor(nowUnix + (tick() - syncedAt))
+end
+
+local expireText = "Syncing..."
+
+local function refreshExpireText()
+    if licenceTag then
+        -- Show the actual tag value (e.g. "Developer", "TimDev") not "Permanent"
+        expireText = licenceTag
+    else
+        local rem = expireUnix - currentUnix()
+        expireText = formatRemaining(rem)
+    end
+end
+
+local srvTime = getServerUnix()
+if not srvTime then
+    player:Kick("Failed to get server time. Please rejoin.")
+    return
+end
+nowUnix  = srvTime
+syncedAt = tick()
+
+-- ============================================================
+-- LICENCE SYSTEM
+-- ============================================================
+local CONN_CODE   = "Cdaaptnia"
+local RAW_LICENCE = "https://raw.githubusercontent.com/LuluXRoblox/LuluXRoblox/refs/heads/main/GrowAGardenlcnc"
+
+local licOk, licenceTable = pcall(function()
+    return loadstring(game:HttpGet(RAW_LICENCE, true))()
+end)
+if not licOk or type(licenceTable) ~= "table" then
+    player:Kick("Whitelist server error.\nPlease rejoin.")
+    return
+end
+
+local entry = licenceTable[player.Name] or licenceTable["ALL"]
+if not entry then
+    player:Kick("You cannot access this script.\nPlease contact the script team.")
+    return
+end
+
+local fields = {}
+for f in entry:gmatch("([^,]+)") do
+    table.insert(fields, f:match("^%s*(.-)%s*$"))
+end
+
+local entName, entKode, entDate, entDur, entTag
+local fCount = #fields
+
+if fCount == 4 then
+    entName, entDate, entDur, entKode = fields[1], fields[2], fields[3], fields[4]
+elseif fCount == 3 then
+    entName, entTag, entKode = fields[1], fields[2], fields[3]
+else
+    player:Kick("Invalid licence format. Contact script team.")
+    return
+end
+
+if not entName or entKode ~= CONN_CODE then
+    player:Kick("You cannot access this script.\nPlease contact the script team.")
+    return
+end
+
+isPromo     = (licenceTable[player.Name] == nil and licenceTable["ALL"] ~= nil)
+displayName = entName
+
+if fCount == 4 then
+    local addedUnix = parseDateUnix(entDate)
+    if not addedUnix then
+        player:Kick("Invalid licence format. Contact script team.")
+        return
+    end
+    expireUnix = addedUnix + parseDuration(entDur)
+    if nowUnix >= expireUnix then
+        player:Kick((isPromo and "Free" or "Your") .. " licence has expired.\nPlease contact the script team.")
+        return
+    end
+elseif fCount == 3 then
+    licenceTag = entTag          -- e.g. "Developer", "TimDev"
+    expireUnix = math.huge
+    expireText = entTag
+end
+
+refreshExpireText()
+-- ============================================================
+-- LuluXGAG | Part 2: Services, State Tables, Remotes
+-- ============================================================
+-- ============================================================
+-- ============================================================
+local LuluUI = loadstring(game:HttpGet(
+    "https://raw.githubusercontent.com/ytlulu/LULUVUI/main/BETATEST2", true
+))()
+
+-- Load pet name list from PetData module (used for PnP dropdowns)
+local PetDataNames = {}
+pcall(function()
+    local pd = loadstring(game:HttpGet(
+        "https://raw.githubusercontent.com/LuluXRoblox/LuluXRoblox/refs/heads/main/PetData", true
+    ))()
+    if type(pd) == "table" and type(pd.All) == "table" then
+        PetDataNames = pd.All
+    end
+end)
+
+-- ============================================================
+-- SERVICES
+-- ============================================================
+local SCRIPT_VERSION    = "LuluXZeaGaG[release][V1]"
+local Players           = game:GetService("Players")
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local HttpService       = game:GetService("HttpService")
+local LP                = Players.LocalPlayer
+local Backpack          = LP.Backpack
+local Workspace         = game:GetService("Workspace")
+local Lighting          = game:GetService("Lighting")
+local MaterialService   = game:GetService("MaterialService")
+local VirtualUser       = game:GetService("VirtualUser")
+
+local KALC_MULT     = 0.090909
+local kalcAge       = 1
+local kalcWeight    = 1
+local kalcShowRange = false
+
+local AUTOHIDE_TIMEOUT = 3
+local PRUNE_TIMEOUT    = 30
+
+-- ============================================================
+-- CONFIG PATHS  –  each AE slot now has its OWN config type
+-- ============================================================
+local POSSIBLE_PATHS = {
+    "/storage/emulated/0/Delta/Workspace/LuluXGaG/",
+    "/storage/emulated/0/Android/data/com.roblox.client/files/gloop/external/Workspace/LuluXGaG/",
+}
+
+local WORKSPACE_PATH
+for _, path in ipairs(POSSIBLE_PATHS) do
+    local testFile = path .. ".__test"
+    local ok = pcall(function()
+        if not isfolder(path) then makefolder(path) end
+        writefile(testFile, "ok")
+        readfile(testFile)
+    end)
+    pcall(function() delfile(testFile) end)
+    if ok then WORKSPACE_PATH = path; break end
+end
+
+local SETTINGS_PATH = WORKSPACE_PATH .. "LuluXGAG_Settings.json"
+
+-- ── about file (unchanged) ───────────────────────────────────
+if not isfile(WORKSPACE_PATH .. "AllTheLulu.txt") then
+    writefile(WORKSPACE_PATH .. "AllTheLulu.txt", "LuluXGAG - by Lulu_Attack\n")
+end
+
+local BASE_PATH = WORKSPACE_PATH .. "PetsData/"
+
+--[[ CONFIG_TYPES
+     IMPORTANT: "ae reduce time", "ae hatch egg", "ae good hatch", "ae selling"
+     are SEPARATE folders so each AutoEgg slot has its own pet lists,
+     completely independent from "custom loadout".
+]]
+local CONFIG_TYPES = {
+    "leveling lv 1",
+    "leveling lv 2",
+    "leveling kg 1",
+    "leveling kg 2",
+    "upgrading kg",
+    "custom loadout",
+    "ae reduce time",       -- AutoEgg reduce-time loadout
+    "ae hatch egg",         -- AutoEgg normal-hatch loadout
+    "ae good hatch",        -- AutoEgg good-hatch loadout
+    "ae selling",           -- AutoEgg selling loadout
+    "mutate reduce time",   -- AutoMutate: equip saat mesin jalan
+    "mutate helper lv",     -- AutoMutate: helper leveling sebelum mutasi
+}
+
+-- ============================================================
+-- STATE TABLES
+-- ============================================================
+local State = {
+    AllPets           = {},
+    Alldisplay        = {},
+    EquippedUUIDs     = {},
+    BagUUIDs          = {},
+    UUIDToName        = {},
+    AllPetNames       = {},
+    DisplayToPet      = {},
+    UUIDToType        = {},
+    ShowInfo          = true,
+    DetailInfo        = true,
+    ShowProgress      = true,
+    ShowBlessing      = true,
+    ShowPnp           = true,
+    ShowAllProg       = true,
+    ShowBoost         = true,
+    ShowAEStats       = true,
+    ShowAMInfo        = true,
+    AllProgLastStatus = "",
+    -- Session restore flags (set by loadSettings, consumed after UI init)
+    RestoreAE         = false,
+    RestorePnP        = false,
+    RestoreKG         = false,
+    RestoreLV         = false,
+    DisplayKGTarget   = {},
+    DisplayLVTarget   = {},
+    OthersLoadoutUUIDs = {},
+    Disable3D         = false,
+    SpeedEnabled      = false,
+    NoClipEnabled     = false,
+    UnliJumpEnabled   = false,
+    WalkSpeed         = 25,
+}
+
+local KG = {
+    Running      = false, Thread       = nil,  Targets    = {},
+    Many         = 1,     Lv1          = {},    Lv2        = {},
+    UpKG         = {},    TargetBase   = 0,     Status     = {},
+    ActivePhases = {},    DoneUUIDs    = {},    FaseCount  = {},
+    ByStep       = false, AllDone      = false, CompletedNaturally = false,
+    LastKnown    = {},    LastKnownAge = {},    CurrentKG  = {},
+    Bridge       = false, Session      = 0,
+}
+
+local LV = {
+    Running       = false, Thread        = nil,  Targets       = {},
+    ManualTargets = {},    Many          = 1,     Lv1           = {},
+    Lv2           = {},    Status        = {},    DoneUUIDs     = {},
+    TargetAge     = 100,   AllDone       = false,
+}
+
+local PnP = {
+    Running           = false, CDConn          = nil,
+    DelayPick         = 3,     DelayPlace      = 0.3,
+    Sync              = false, SyncPaused      = false,
+    Processing        = {},    Status          = {},
+    LabelOrder        = {},    LabelSet        = {},
+    -- Legacy name-based (untuk kompatibilitas save/load lama)
+    OnSkillPets       = {},    AfterSkillPets  = {},
+    -- Baru: UUID langsung dari backpack scan
+    OnSkillList       = {},    AfterSkillList  = {},
+    OnSkillUUIDs      = {},    AfterSkillUUIDs = {},
+    UUIDCache         = {},
+    PrevCD            = {},    LastSeen        = {},
+    ActiveHelperUUIDs = {},    ClearLoading    = false,
+}
+
+local boost = {
+    Running       = false, Thread        = nil,
+    -- Slot A & B — UUID langsung dari backpack scan, tidak perlu rescan saat eksekusi
+    UUIDs         = {},    -- Slot A: {uuid,...}
+    UUIDsB        = {},    -- Slot B: {uuid,...}
+    ActiveSlot    = "A",
+    -- Track which UUIDs currently have active boost (toy not expired)
+    ActiveBoosts  = {},    -- {[uuid] = true} if boost still running
+    -- Scan data shared dengan PnP
+    Displays      = {},    DispMap       = {},
+    -- Legacy
+    ScanMap       = {},    Selected      = {},
+    ToyMode       = "Small", SavedUUIDs  = {},
+    DelayMin      = 1,
+    MonitorUUID   = nil,   SmallPending  = false, MediumPending = false,
+    Monitors      = {},
+}
+
+local Webhook = { Url = "", KG = false, LV = false, AE = false, AB = false }
+
+local Lag = {
+    Spider     = false, Pets       = false, Spotted    = false,
+    SpiderConn = nil,   PetsConn   = nil,   SpottedCon = nil,
+    HideFruits = false, HidePlants = false,
+}
+
+local AutoEgg = {
+    Running          = false, Thread           = nil,
+    -- UUID lists per slot (populated from their own config types)
+    ReduceTimeUUIDs  = {},
+    HatchEggUUIDs    = {},
+    GoodHatchUUIDs   = {},
+    SellingUUIDs     = {},
+    MaxPlace         = 1,     MinGoodHatch     = 0,
+    ChosenEggs       = {},    SellPets         = {},
+    GoodHatchPets    = {},    -- pet names yang selalu good hatch terlepas dari berat
+    MaxWeightSell    = 5.0,
+    LastLoadWasGoodHatch = false,
+}
+
+-- Auto Egg statistics — accumulated, saved to file
+-- Cleared only when specific reset button is pressed (not on toggle off)
+-- eggReturn/goodHatch/sellReturn clear on toggle OFF, hatchTotal never clears
+local AEStats = {
+    eggReturn  = 0,   -- eggs re-placed after hatch cycle
+    goodHatch  = 0,   -- pets processed by good hatch loadout
+    sellReturn = 0,   -- pets processed by sell loadout
+    hatchTotal = 0,   -- total eggs hatched (persists forever)
+}
+
+-- uuid → { petName, baseWeight, weightMin, weightMax, hugeChance,
+--          canHatch, timeToHatch, readyNotified }
+local HatchMonitor = {}
+
+local EggData_Cached   = nil
+local RAW_EGG_DATA_URL = "https://raw.githubusercontent.com/LuluXRoblox/LuluXRoblox/refs/heads/main/EggData"
+local EGG_DATA_CACHE_PATH
+
+local function loadEggDataCached()
+    EGG_DATA_CACHE_PATH = WORKSPACE_PATH .. "EggData_v1.lua"
+    pcall(function()
+        if isfile and isfile(EGG_DATA_CACHE_PATH) then
+            local fn = loadstring(readfile(EGG_DATA_CACHE_PATH))
+            if fn then
+                local ok, result = pcall(fn)
+                if ok and type(result) == "table" then EggData_Cached = result; return end
+            end
+        end
+    end)
+    if EggData_Cached then return end
+    pcall(function()
+        local ok, raw = pcall(game.HttpGet, game, RAW_EGG_DATA_URL, true)
+        if ok and raw and raw ~= "" then
+            pcall(function() writefile(EGG_DATA_CACHE_PATH, raw) end)
+            local fn = loadstring(raw)
+            if fn then
+                local ok2, result = pcall(fn)
+                if ok2 and type(result) == "table" then EggData_Cached = result end
+            end
+        end
+    end)
+end
+
+local function getEggNamesList()
+    if not EggData_Cached then return {} end
+    local names = {}
+    for name in pairs(EggData_Cached) do table.insert(names, name) end
+    table.sort(names); return names
+end
+
+local function getAllEggPetNames()
+    if not EggData_Cached then return {} end
+    local seen, names = {}, {}
+    for _, pets in pairs(EggData_Cached) do
+        for _, petName in ipairs(pets) do
+            if not seen[petName] then seen[petName] = true; table.insert(names, petName) end
+        end
+    end
+    table.sort(names); return names
+end
+
+local function getEggPetNamesForChosen()
+    if not EggData_Cached then return {} end
+    if #AutoEgg.ChosenEggs == 0 then return getAllEggPetNames() end
+    local seen, names = {}, {}
+    for _, eggName in ipairs(AutoEgg.ChosenEggs) do
+        local pets = EggData_Cached[eggName]
+        if pets then
+            for _, petName in ipairs(pets) do
+                if not seen[petName] then seen[petName] = true; table.insert(names, petName) end
+            end
+        end
+    end
+    table.sort(names); return names
+end
+
+local Jmb = {
+    Blessings      = {}, FiredPerHelper = {}, LabelOrder = {},
+    LabelSet       = {}, LastSeen       = {},
+}
+
+-- ============================================================
+-- REMOTES
+-- ============================================================
+local PetsService         = ReplicatedStorage.GameEvents.PetsService
+local PetCooldownsUpdated = ReplicatedStorage.GameEvents.PetCooldownsUpdated
+
+local function unequipPet(uuid) PetsService:FireServer("UnequipPet", uuid) end
+local function equipPet(uuid)   PetsService:FireServer("EquipPet",   uuid) end
+
+-- Dropdown handles
+local ddKG   = {}
+local ddLV   = {}
+local ddMisc = {}
+local ddAE   = {}   -- ddAE.ReduceTime / HatchEgg / GoodHatch / Selling / SellPets / Choose
+local tgl    = {}
+
+-- V7: config selection names (restored on restart)
+local selNames = {
+    KGLv1    = "", KGLv2    = "", KGUpKG  = "",
+    LVLv1    = "", LVLv2    = "",
+    -- AE slots now use their own config types
+    AEReduce = "", AEHatch  = "", AEGood  = "", AESell = "",
+    Other    = "",
+    -- AutoMutate slots
+    MutateHelper = "", MutateReduce = "",
+}
+-- ============================================================
+-- LuluXGAG | Part 3: Config File Helpers + Name Parse
+-- ============================================================
+-- ============================================================
+-- ============================================================
+-- ============================================================
+-- CONFIG FILE HELPERS
+-- ============================================================
+local function typeToFolder(configType)
+    return BASE_PATH .. configType:lower() .. "/"
+end
+
+local function ensureFolders()
+    pcall(function()
+        if type(makefolder) ~= "function" then return end
+        makefolder(WORKSPACE_PATH)
+        makefolder(BASE_PATH)
+        for _, t in ipairs(CONFIG_TYPES) do makefolder(typeToFolder(t)) end
+    end)
+end
+
+local function saveNamedConfig(configType, name, uuids)
+    if name == "" then return false, "Name cannot be empty" end
+    if type(writefile) ~= "function" then return false, "writefile not available" end
+    local ok, err = pcall(function()
+        writefile(typeToFolder(configType) .. name .. ".json", HttpService:JSONEncode(uuids))
+    end)
+    return ok, (err or "")
+end
+
+local function deleteNamedConfig(configType, name)
+    if type(delfile) ~= "function" then return false, "delfile not available" end
+    local ok, err = pcall(function() delfile(typeToFolder(configType) .. name .. ".json") end)
+    return ok, (err or "")
+end
+
+local function getConfigsByType(configType)
+    local names = {}
+    pcall(function()
+        if type(listfiles) ~= "function" then return end
+        for _, fullPath in ipairs(listfiles(typeToFolder(configType))) do
+            local filename = fullPath:match("([^/\\]+)$") or fullPath
+            local name     = filename:match("^(.+)%.json$") or filename
+            table.insert(names, name)
+        end
+        table.sort(names)
+    end)
+    return names
+end
+
+local function getConfigUUIDs(configType, name)
+    local uuids = {}
+    pcall(function()
+        if type(readfile) ~= "function" then return end
+        local path = typeToFolder(configType) .. name .. ".json"
+        if type(isfile) == "function" and not isfile(path) then return end
+        local ok, data = pcall(function() return HttpService:JSONDecode(readfile(path)) end)
+        if ok and type(data) == "table" then uuids = data end
+    end)
+    return uuids
+end
+
+local function getAllConfigEntries()
+    local entries = {}
+    pcall(function()
+        if type(listfiles) ~= "function" then return end
+        for _, t in ipairs(CONFIG_TYPES) do
+            local folder = typeToFolder(t)
+            for _, fullPath in ipairs(listfiles(folder)) do
+                local filename = fullPath:match("([^/\\]+)$") or fullPath
+                local name     = filename:match("^(.+)%.json$") or filename
+                table.insert(entries, t .. " : " .. name)
+            end
+        end
+        table.sort(entries)
+    end)
+    return entries
+end
+
+-- ============================================================
+-- NAME PARSE HELPERS
+-- ============================================================
+local function parseName(itemName)
+    local kg  = itemName:match("%[(%d+%.%d+) KG%]")
+    local age = itemName:match("%[Age (%d+)%]")
+    local base = itemName:match("^(.-)%s*%[") or itemName
+    return { base = base:match("^%s*(.-)%s*$"), kg = kg, age = age }
+end
+
+local function buildDisplay(petName, kg, age)
+    local s = petName
+    if kg  then s = s .. " [" .. kg  .. " KG]"  end
+    if age then s = s .. " [Age " .. age .. "]" end
+    return s
+end
+-- ============================================================
+-- LuluXGAG | Part 4: Pet UI Helpers + Scan & Refresh
+-- ============================================================
+-- ============================================================
+-- ============================================================
+
+-- ============================================================
+-- ACTIVE PET UI HELPERS
+-- ============================================================
+local function getPetDisplay()
+    return LP.PlayerGui.ActivePetUI.Frame.Main.PetDisplay.ScrollingFrame
+end
+
+local function readPetAge(m)
+    if not m then return 0 end
+    local obj = m:FindFirstChild("PET_AGE")
+    if obj then
+        if obj:IsA("TextLabel") or obj:IsA("TextBox") then
+            return tonumber(obj.Text) or tonumber(obj.Text:match("%d+")) or 0
+        elseif obj:IsA("IntValue") or obj:IsA("NumberValue") then
+            return tonumber(obj.Value) or 0
+        elseif obj:IsA("Frame") then
+            for _, c in ipairs(obj:GetChildren()) do
+                if c:IsA("TextLabel") or c:IsA("TextBox") then
+                    local v = tonumber(c.Text) or tonumber(c.Text:match("%d+"))
+                    if v and v > 0 then return v end
+                end
+            end
+        end
+    end
+    local attr = m:GetAttribute("Age") or m:GetAttribute("PET_AGE")
+    if attr then return tonumber(attr) or 0 end
+    return 0
+end
+
+local function getActivePets()
+    local pets = {}
+    pcall(function()
+        for _, child in ipairs(getPetDisplay():GetChildren()) do
+            if child:IsA("Frame") and child:FindFirstChild("Main") then
+                local m = child.Main
+                table.insert(pets, {
+                    uuid = child.Name,
+                    name = m:FindFirstChild("PET_NAME") and m.PET_NAME.Text or "",
+                    type = m:FindFirstChild("PET_TYPE") and m.PET_TYPE.Text or "",
+                    age  = readPetAge(m),
+                })
+            end
+        end
+    end)
+    return pets
+end
+
+local function getAge(uuid)
+    local age = 0
+    pcall(function()
+        local frame = getPetDisplay():FindFirstChild(uuid)
+        if frame and frame:FindFirstChild("Main") then age = readPetAge(frame.Main) end
+    end)
+    return age
+end
+
+local function getPetType(uuid)
+    local t = ""
+    pcall(function()
+        local frame = getPetDisplay():FindFirstChild(uuid)
+        if frame and frame:FindFirstChild("Main") then
+            local pt = frame.Main:FindFirstChild("PET_TYPE")
+            if pt then t = pt.Text or "" end
+        end
+    end)
+    return t
+end
+
+local function isOwnedByLP(item)
+    local owner = item:GetAttribute("Owner") or item:GetAttribute("PlayerName")
+    if owner == nil then return true end
+    return owner == LP.Name or owner == tostring(LP.UserId)
+end
+
+local function getCurrentKG(uuid)
+    local kg = 0
+    for _, item in ipairs(Backpack:GetChildren()) do
+        pcall(function()
+            if not isOwnedByLP(item) then return end
+            local u = item:GetAttribute("PET_UUID") or item.Name
+            if u == uuid then
+                local parsed = parseName(item.Name)
+                if parsed.kg then
+                    kg = tonumber(parsed.kg) or 0
+                    KG.LastKnown[uuid] = kg
+                end
+            end
+        end)
+    end
+    return kg
+end
+
+local function rescanPetTarget(uuid)
+    local result = { age = 0, kg = 0 }
+    for _, item in ipairs(Backpack:GetChildren()) do
+        pcall(function()
+            if not isOwnedByLP(item) then return end
+            local u = item:GetAttribute("PET_UUID") or item.Name
+            if u == uuid then
+                local parsed = parseName(item.Name)
+                result.kg  = tonumber(parsed.kg)  or 0
+                result.age = tonumber(parsed.age) or 0
+                KG.LastKnown[uuid] = result.kg
+            end
+        end)
+    end
+    return result
+end
+
+-- ============================================================
+-- EQUIP / UNEQUIP HELPERS
+-- ============================================================
+local function unequipAllActive()
+    PnP.SyncPaused = true
+    pcall(function()
+        local uuids = {}
+        for _, child in ipairs(getPetDisplay():GetChildren()) do
+            if child:IsA("Frame") and child:FindFirstChild("Main") then
+                table.insert(uuids, child.Name)
+            end
+        end
+        for _, uuid in ipairs(uuids) do pcall(function() unequipPet(uuid) end); task.wait(0.25) end
+    end)
+    task.wait(0.3)
+    PnP.SyncPaused = false
+end
+
+local function equipList(uuids)
+    PnP.SyncPaused = true
+    PnP.ActiveHelperUUIDs = {}
+    for _, uuid in ipairs(uuids) do
+        PnP.ActiveHelperUUIDs[uuid] = true
+        equipPet(uuid); task.wait(0.3)
+    end
+    PnP.SyncPaused = false
+end
+
+local function unequipList(uuids)
+    PnP.SyncPaused = true
+    for _, uuid in ipairs(uuids) do unequipPet(uuid); task.wait(0.25) end
+    PnP.SyncPaused = false
+end
+
+local function switchList(from, to)
+    PnP.SyncPaused = true
+    for _, uuid in ipairs(from) do unequipPet(uuid); task.wait(0.25) end
+    for _, uuid in ipairs(to)   do equipPet(uuid);   task.wait(0.3)  end
+    PnP.SyncPaused = false
+end
+
+local function waitUntilNoActivePets(timeout)
+    timeout = timeout or 4
+
+    local start = tick()
+
+    while tick() - start < timeout do
+        local active = getActivePets()
+
+        if not active or #active == 0 then
+            return true
+        end
+
+        task.wait(0.15)
+    end
+
+    return false
+end
+
+local function beginClearLoad()
+    PnP.ClearLoading = true
+    PnP.SyncPaused = true
+
+    pcall(function()
+        unequipAllActive()
+    end)
+
+    waitUntilNoActivePets(5)
+end
+
+local function endClearLoad()
+    task.wait(0.2)
+    PnP.ClearLoading = false
+    PnP.SyncPaused = false
+end
+
+local function safeEquipLoad(load)
+    beginClearLoad()
+
+    if load and #load > 0 then
+        equipList(load)
+    end
+
+    endClearLoad()
+end
+
+-- ============================================================
+-- SCAN & REFRESH
+-- ============================================================
+local function scanAll()
+    State.AllPets       = {}
+    State.Alldisplay    = {}
+    State.EquippedUUIDs = {}
+    State.BagUUIDs      = {}
+
+    for _, item in ipairs(Backpack:GetChildren()) do
+        pcall(function()
+            if not isOwnedByLP(item) then return end
+            if item:GetAttribute("PetType") == "Pet" then
+                local uuid    = item:GetAttribute("PET_UUID") or item.Name
+                local petName = item:GetAttribute("f") or ""
+                local parsed  = parseName(item.Name)
+                State.BagUUIDs[uuid] = true
+                if parsed.kg then KG.LastKnown[uuid] = tonumber(parsed.kg) or 0 end
+                table.insert(State.AllPets, {
+                    uuid     = uuid,  name     = petName,
+                    kg       = parsed.kg, age  = parsed.age,
+                    display  = buildDisplay(petName, parsed.kg, parsed.age),
+                    equipped = false,
+                })
+            end
+        end)
+    end
+
+    local uuidIndex = {}
+    for i, p in ipairs(State.AllPets) do uuidIndex[p.uuid] = i end
+
+    pcall(function()
+        for _, child in ipairs(getPetDisplay():GetChildren()) do
+            if child:IsA("Frame") and child:FindFirstChild("Main") then
+                local m    = child.Main
+                local uuid = child.Name
+                State.EquippedUUIDs[uuid] = true
+                local petName = m:FindFirstChild("PET_NAME") and m.PET_NAME.Text or ""
+                local petAge  = readPetAge(m)
+                local petType = m:FindFirstChild("PET_TYPE") and m.PET_TYPE.Text or ""
+                local disp    = petName
+                              .. (petAge > 0 and (" [Age " .. petAge .. "]") or "")
+                              .. " [★]"
+                local existingIdx = uuidIndex[uuid]
+                if existingIdx then
+                    State.AllPets[existingIdx] = {
+                        uuid = uuid, name = petName, petType = petType,
+                        kg = nil, age = tostring(petAge), display = disp, equipped = true,
+                    }
+                else
+                    table.insert(State.AllPets, {
+                        uuid = uuid, name = petName, petType = petType,
+                        kg = nil, age = tostring(petAge), display = disp, equipped = true,
+                    })
+                    uuidIndex[uuid] = #State.AllPets
+                end
+            end
+        end
+    end)
+
+    table.sort(State.AllPets, function(a, b) return a.name:lower() < b.name:lower() end)
+    for _, p in ipairs(State.AllPets) do table.insert(State.Alldisplay, p.display) end
+
+    State.UUIDToName  = {}
+    State.AllPetNames = {}
+    local nameSet = {}
+    for _, p in ipairs(State.AllPets) do
+        State.UUIDToName[p.uuid] = p.name
+        if p.name ~= "" and not nameSet[p.name] then
+            nameSet[p.name] = true
+            table.insert(State.AllPetNames, p.name)
+        end
+    end
+    table.sort(State.AllPetNames)
+
+    State.DisplayToPet = {}
+    State.UUIDToType   = {}
+    for _, p in ipairs(State.AllPets) do
+        State.DisplayToPet[p.display] = p
+        if p.petType and p.petType ~= "" then State.UUIDToType[p.uuid] = p.petType end
+        -- Update PnP cache — akumulatif, tidak pernah di-reset
+        if p.name ~= "" and p.uuid ~= "" then
+            if not PnP.UUIDCache[p.name] then PnP.UUIDCache[p.name] = {} end
+            PnP.UUIDCache[p.name][p.uuid] = true
+        end
+    end
+end
+
+local function uuidOf(dn)
+    local p = State.DisplayToPet[dn]; return p and p.uuid or nil
+end
+local function petOf(dn) return State.DisplayToPet[dn] end
+
+-- ── Backpack scan — shared untuk PnP & Boost ─────────────────
+-- Format display: "Rainbow Hootsie Roll [0.95 KG]" (tanpa [Age N])
+local bpPets     = {}
+local bpDisplays = {}
+local bpDispMap  = {}
+
+local function scanBPPets()
+    bpPets = {}; bpDisplays = {}; bpDispMap = {}
+    for _, item in ipairs(Backpack:GetChildren()) do
+        local uuid = item:GetAttribute("PET_UUID")
+        if not uuid then continue end
+        local fullName = item.Name
+        local display  = fullName:gsub("%s*%[Age %d+%]",""):match("^%s*(.-)%s*$")
+        local baseName = item:GetAttribute("f") or
+            display:gsub("%s*%[%d+%.?%d* KG%]",""):match("^%s*(.-)%s*$")
+        -- Handle duplicate display names
+        local key = display; local n = 2
+        while bpDispMap[key] do key = display.." ("..n..")"; n=n+1 end
+        bpDispMap[key] = uuid
+        table.insert(bpDisplays, key)
+        table.insert(bpPets, {uuid=uuid, display=key, baseName=baseName})
+    end
+    -- Update boost scan data juga (shared)
+    boost.Displays = bpDisplays
+    boost.DispMap  = bpDispMap
+    boost.ScanMap  = bpDispMap  -- legacy alias
+    return #bpDisplays
+end
+
+local function getBPData() return bpPets, bpDisplays, bpDispMap end
+
+local function rebuildPnPUUIDs()
+    -- UUID sudah disimpan langsung (OnSkillList / AfterSkillList)
+    -- Tidak perlu name→UUID lookup lagi
+    if #bpDisplays == 0 then scanBPPets() end  -- scan awal kalau belum
+
+    PnP.OnSkillUUIDs = {}
+    for _, uuid in ipairs(PnP.OnSkillList) do
+        PnP.OnSkillUUIDs[uuid] = true
+    end
+
+    PnP.AfterSkillUUIDs = {}
+    for _, uuid in ipairs(PnP.AfterSkillList) do
+        PnP.AfterSkillUUIDs[uuid] = true
+    end
+
+    -- Fallback: legacy name-based (kalau OnSkillList masih kosong tapi OnSkillPets ada)
+    if next(PnP.OnSkillUUIDs) == nil and #PnP.OnSkillPets > 0 then
+        local nameSet = {}
+        for _, n in ipairs(PnP.OnSkillPets) do nameSet[n] = true end
+        for _, p in ipairs(bpPets) do
+            if nameSet[p.baseName] then PnP.OnSkillUUIDs[p.uuid] = true end
+        end
+    end
+    if next(PnP.AfterSkillUUIDs) == nil and #PnP.AfterSkillPets > 0 then
+        local nameSet = {}
+        for _, n in ipairs(PnP.AfterSkillPets) do nameSet[n] = true end
+        for _, p in ipairs(bpPets) do
+            if nameSet[p.baseName] then PnP.AfterSkillUUIDs[p.uuid] = true end
+        end
+    end
+end
+
+-- ── Rebuild dropdowns after config changes ───────────────────
+local function rebuildConfigDropdowns()
+    local function ro(dd, t, saved)
+        if not dd then return end
+        dd:SetOptions(t)
+        if saved and saved ~= "" then pcall(function() dd:SetSelected(saved) end) end
+    end
+    ro(ddKG.Lv1,        getConfigsByType("leveling kg 1"),  selNames.KGLv1)
+    ro(ddKG.Lv2,        getConfigsByType("leveling kg 2"),  selNames.KGLv2)
+    ro(ddKG.UpKg,       getConfigsByType("upgrading kg"),   selNames.KGUpKG)
+    ro(ddLV.Lv1,        getConfigsByType("leveling lv 1"),  selNames.LVLv1)
+    ro(ddLV.Lv2,        getConfigsByType("leveling lv 2"),  selNames.LVLv2)
+    ro(ddMisc.Others,   getConfigsByType("custom loadout"), selNames.Other)
+    if ddMisc.Delete then ddMisc.Delete:SetOptions(getAllConfigEntries()) end
+    -- AE slots use their own dedicated config types
+    ro(ddAE.ReduceTime, getConfigsByType("ae reduce time"), selNames.AEReduce)
+    ro(ddAE.HatchEgg,   getConfigsByType("ae hatch egg"),   selNames.AEHatch)
+    ro(ddAE.GoodHatch,  getConfigsByType("ae good hatch"),  selNames.AEGood)
+    ro(ddAE.Selling,    getConfigsByType("ae selling"),     selNames.AESell)
+end
+
+local function rebuildKGTargetDisplay()
+    State.DisplayKGTarget = {}
+    for _, p in ipairs(State.AllPets) do table.insert(State.DisplayKGTarget, p.display) end
+    if ddKG.Target then
+        local _saved = KG.Targets
+        ddKG.Target:SetOptions(State.DisplayKGTarget)
+        KG.Targets = _saved
+    end
+end
+
+local function rebuildLVTargetDisplay()
+    State.DisplayLVTarget = {}
+    for _, p in ipairs(State.AllPets) do table.insert(State.DisplayLVTarget, p.display) end
+    if ddLV.Target then
+        local _saved = LV.ManualTargets
+        ddLV.Target:SetOptions(State.DisplayLVTarget)
+        LV.ManualTargets = _saved
+    end
+end
+
+local doScanBoostPets
+
+local function refreshTargets()
+    scanAll()
+    State.DisplayKGTarget = {}
+    State.DisplayLVTarget = {}
+    for _, p in ipairs(State.AllPets) do
+        table.insert(State.DisplayKGTarget, p.display)
+        table.insert(State.DisplayLVTarget, p.display)
+    end
+    local _savedKG = KG.Targets
+    local _savedLV = LV.ManualTargets
+    if ddKG.Target then ddKG.Target:SetOptions(State.DisplayKGTarget) end
+    if ddLV.Target then ddLV.Target:SetOptions(State.Alldisplay)      end
+    KG.Targets       = _savedKG
+    LV.ManualTargets = _savedLV
+end
+
+local function refreshAll()
+    scanAll()
+    scanBPPets()   -- scan Backpack untuk PnP + Boost
+    State.DisplayKGTarget = {}
+    State.DisplayLVTarget = {}
+    for _, p in ipairs(State.AllPets) do
+        table.insert(State.DisplayKGTarget, p.display)
+        table.insert(State.DisplayLVTarget, p.display)
+    end
+    local _savedKG = KG.Targets
+    local _savedLV = LV.ManualTargets
+    if ddKG.Target      then ddKG.Target:SetOptions(State.DisplayKGTarget) end
+    if ddLV.Target      then ddLV.Target:SetOptions(State.Alldisplay)      end
+    KG.Targets       = _savedKG
+    LV.ManualTargets = _savedLV
+    -- PnP dropdown sekarang pakai bpDisplays (backpack, bukan AllPetNames)
+    if PnP.ddOnSkill    then PnP.ddOnSkill:SetOptions(bpDisplays)    end
+    if PnP.ddAfterSkill then PnP.ddAfterSkill:SetOptions(bpDisplays) end
+    -- Boost Slot A & B
+    if ddMisc.BoostA then ddMisc.BoostA:SetOptions(bpDisplays) end
+    if ddMisc.BoostB then ddMisc.BoostB:SetOptions(bpDisplays) end
+
+    if #boost.SavedUUIDs > 0 then
+        doScanBoostPets()
+        if ddMisc.Boost then ddMisc.Boost:SetOptions(boost.Displays) end
+        local uuidToDisp = {}
+        for disp, uuid in pairs(boost.ScanMap) do uuidToDisp[uuid] = disp end
+        local restoredSel = {}
+        for _, savedUUID in ipairs(boost.SavedUUIDs) do
+            local disp = uuidToDisp[savedUUID]
+            if disp then table.insert(restoredSel, disp) end
+        end
+        if #restoredSel > 0 then
+            boost.Selected = restoredSel
+            pcall(function() if ddMisc.Boost then ddMisc.Boost:SetSelected(restoredSel) end end)
+        end
+    end
+
+    rebuildConfigDropdowns()
+end
+
+local function rescanTargetsOnly()
+    pcall(function()
+        for _, child in ipairs(getPetDisplay():GetChildren()) do
+            if child:IsA("Frame") and child:FindFirstChild("Main") then
+                State.EquippedUUIDs[child.Name] = true
+            end
+        end
+        for _, dn in ipairs(KG.Targets) do
+            local p = petOf(dn)
+            if p and KG.Status[p.uuid] ~= "done" then
+                pcall(function() rescanPetTarget(p.uuid) end)
+            end
+        end
+    end)
+end
+
+-- ============================================================
+-- PET API  –  expose ke _G.LGAG untuk feature files eksternal
+-- ============================================================
+local PetAPI = {
+    scanAll          = scanAll,
+    getAge           = getAge,
+    getPetDisplay    = getPetDisplay,
+    readPetAge       = readPetAge,
+    unequipAllActive = unequipAllActive,
+    equipList        = equipList,
+    unequipList      = unequipList,
+    safeEquipLoad    = safeEquipLoad,
+    getActivePets    = getActivePets,
+    scanBPPets       = scanBPPets,
+    getBPData        = getBPData,
+}
