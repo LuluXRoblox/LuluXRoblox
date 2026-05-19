@@ -604,9 +604,10 @@ pcall(function()
                 local rawBoostUUID = path:match("PetInventory/Data/(%b{})") or path:match("PetInventory/Data/([%w%-]+)")
                 if rawBoostUUID and path:match("/PetData/Boosts$") and type(value) == "table" then
                     local normUUID      = aeNormUUID(rawBoostUUID)
-                    local selectedUUIDs = getBoostSelectedUUIDs()
                     local isSelected    = false
-                    for _, u in ipairs(selectedUUIDs) do
+                    -- Use ALL selected UUIDs for monitoring (not just expired)
+                    -- so we detect when active boosts expire too
+                    for _, u in ipairs(boost.UUIDs) do
                         if aeNormUUID(u) == normUUID then isSelected = true; break end
                     end
                     if isSelected then
