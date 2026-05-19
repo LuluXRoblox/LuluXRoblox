@@ -1039,6 +1039,7 @@ _G.LGAG = {
     Webhook        = Webhook,
     sendWebhook    = sendWebhookEmbed,
     AEStats        = AEStats,
+    tab            = tab,
 }
 
 -- Load feature files dari GitHub (non-blocking)
