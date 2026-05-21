@@ -374,6 +374,12 @@ local function rebuildConfigDropdowns()
     ro(ddAE.HatchEgg,   getConfigsByType("ae hatch egg"),   selNames.AEHatch)
     ro(ddAE.GoodHatch,  getConfigsByType("ae good hatch"),  selNames.AEGood)
     ro(ddAE.Selling,    getConfigsByType("ae selling"),     selNames.AESell)
+    -- Auto Mutate: Helper and Reduce both use configs
+    local ddAM = _G.LGAG and _G.LGAG.ddAM
+    if ddAM then
+        ro(ddAM.Helper, getConfigsByType("mutate helper lv"),  selNames.MutateHelper)
+        ro(ddAM.Reduce, getConfigsByType("mutate reduce time"), selNames.MutateReduce)
+    end
 end
 
 local function rebuildKGTargetDisplay()
