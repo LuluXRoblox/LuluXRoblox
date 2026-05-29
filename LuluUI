@@ -1849,6 +1849,153 @@ local function _mkBadge(parent, text, yOff, theme, opts)
 end
 
 -- ============================================================
+-- TABLE STATIS (info grid 2 kolom)
+-- headers = {"Kolom1","Kolom2"} atau nil (tanpa header)
+-- rows    = { {"key1","val1"}, {"key2","val2"}, ... }
+-- opts: colWidths={0.38,0.62}, rowHeight=22, note="teks kecil bawah"
+-- ============================================================
+local function _mkTable(parent, headers, rows, yOff, theme, opts, depth)
+    opts      = opts  or {}
+    depth     = depth or 0
+    local ML  = 8 + depth * 10
+    local MR  = 8
+    local RH  = opts.rowHeight or 22
+    local CW1 = (opts.colWidths and opts.colWidths[1]) or 0.38
+    local CW2 = (opts.colWidths and opts.colWidths[2]) or (1 - CW1)
+
+    local totalRows = #rows
+    local hasHeader = headers ~= nil and #headers > 0
+    local headerH   = hasHeader and RH or 0
+    local noteH     = opts.note and 20 or 0
+    local totalH    = headerH + totalRows * RH + noteH + 2
+
+    -- Container
+    local bg = Instance.new("Frame")
+    bg.Size             = UDim2.new(1, -(ML + MR), 0, totalH)
+    bg.Position         = UDim2.new(0, ML, 0, yOff)
+    bg.BackgroundColor3 = theme.contentBg
+    bg.BorderSizePixel  = 0
+    bg.ClipsDescendants = true
+    bg.Parent           = parent
+    mkCorner(bg, 8)
+
+    local stroke = Instance.new("UIStroke", bg)
+    stroke.Color           = theme.divider
+    stroke.Thickness        = 1
+    stroke.ApplyStrokeMode  = Enum.ApplyStrokeMode.Border
+
+    -- Header row
+    if hasHeader then
+        local hdrBg = Instance.new("Frame")
+        hdrBg.Size             = UDim2.new(1, 0, 0, headerH)
+        hdrBg.Position         = UDim2.new(0, 0, 0, 0)
+        hdrBg.BackgroundColor3 = theme.accent
+        hdrBg.BackgroundTransparency = 0.15
+        hdrBg.BorderSizePixel  = 0
+        hdrBg.Parent           = bg
+
+        local function mkHdrCell(text, xScale, wScale)
+            local l = Instance.new("TextLabel")
+            l.Size             = UDim2.new(wScale, -8, 0, headerH)
+            l.Position         = UDim2.new(xScale, 6, 0, 0)
+            l.BackgroundTransparency = 1
+            l.Text             = text
+            l.Font             = Enum.Font.GothamBold
+            l.TextSize         = 10
+            l.TextColor3       = theme.textWhite
+            l.TextXAlignment   = Enum.TextXAlignment.Left
+            l.TextTruncate     = Enum.TextTruncate.AtEnd
+            l.Parent           = bg
+        end
+        mkHdrCell(headers[1] or "", 0,    CW1)
+        mkHdrCell(headers[2] or "", CW1,  CW2)
+
+        -- Divider bawah header
+        local div = Instance.new("Frame")
+        div.Size             = UDim2.new(1, 0, 0, 1)
+        div.Position         = UDim2.new(0, 0, 0, headerH - 1)
+        div.BackgroundColor3 = theme.divider
+        div.BorderSizePixel  = 0
+        div.Parent           = bg
+    end
+
+    -- Data rows
+    for i, row in ipairs(rows) do
+        local ry   = headerH + (i - 1) * RH
+        local even = (i % 2 == 0)
+
+        local rb = Instance.new("Frame")
+        rb.Size             = UDim2.new(1, 0, 0, RH)
+        rb.Position         = UDim2.new(0, 0, 0, ry)
+        rb.BackgroundColor3 = even and theme.accordionBg or theme.contentBg
+        rb.BorderSizePixel  = 0
+        rb.Parent           = bg
+
+        -- Divider vertikal antara 2 kolom
+        local vdiv = Instance.new("Frame")
+        vdiv.Size             = UDim2.new(0, 1, 1, 0)
+        vdiv.Position         = UDim2.new(CW1, 0, 0, 0)
+        vdiv.BackgroundColor3 = theme.divider
+        vdiv.BorderSizePixel  = 0
+        vdiv.Parent           = rb
+
+        -- Kolom 1 (key) — bold, accordionTxt
+        local l1 = Instance.new("TextLabel")
+        l1.Size             = UDim2.new(CW1, -8, 1, 0)
+        l1.Position         = UDim2.new(0, 7, 0, 0)
+        l1.BackgroundTransparency = 1
+        l1.Text             = tostring(row[1] or "")
+        l1.Font             = Enum.Font.GothamBold
+        l1.TextSize         = 10
+        l1.TextColor3       = theme.accordionTxt
+        l1.TextXAlignment   = Enum.TextXAlignment.Left
+        l1.TextTruncate     = Enum.TextTruncate.AtEnd
+        l1.Parent           = rb
+
+        -- Kolom 2 (value) — normal, text
+        local l2 = Instance.new("TextLabel")
+        l2.Size             = UDim2.new(CW2, -8, 1, 0)
+        l2.Position         = UDim2.new(CW1, 7, 0, 0)
+        l2.BackgroundTransparency = 1
+        l2.Text             = tostring(row[2] or "")
+        l2.Font             = Enum.Font.Gotham
+        l2.TextSize         = 10
+        l2.TextColor3       = theme.text
+        l2.TextXAlignment   = Enum.TextXAlignment.Left
+        l2.TextTruncate     = Enum.TextTruncate.AtEnd
+        l2.Parent           = rb
+
+        -- Divider horizontal bawah tiap row (kecuali terakhir)
+        if i < totalRows then
+            local hdiv = Instance.new("Frame")
+            hdiv.Size             = UDim2.new(1, 0, 0, 1)
+            hdiv.Position         = UDim2.new(0, 0, 1, -1)
+            hdiv.BackgroundColor3 = theme.divider
+            hdiv.BackgroundTransparency = 0.5
+            hdiv.BorderSizePixel  = 0
+            hdiv.Parent           = rb
+        end
+    end
+
+    -- Note kecil di bawah tabel (optional)
+    if opts.note then
+        local noteLbl = Instance.new("TextLabel")
+        noteLbl.Size             = UDim2.new(1, -16, 0, noteH)
+        noteLbl.Position         = UDim2.new(0, 8, 0, totalH - noteH)
+        noteLbl.BackgroundTransparency = 1
+        noteLbl.Text             = "  " .. opts.note
+        noteLbl.Font             = Enum.Font.Gotham
+        noteLbl.TextSize         = 9
+        noteLbl.TextColor3       = theme.accordionTxt
+        noteLbl.TextXAlignment   = Enum.TextXAlignment.Left
+        noteLbl.TextTruncate     = Enum.TextTruncate.AtEnd
+        noteLbl.Parent           = bg
+    end
+
+    return bg, totalH
+end
+
+-- ============================================================
 -- COPY BUTTON
 -- Baris label + tombol kecil "Copy" di kanan
 -- Klik → setclipboard(value), lalu tombol sementara jadi " Copied"
@@ -2097,6 +2244,16 @@ function Section:Badge(text, opts)
     opts = opts or {}
     _mkBadge(self._c, text, self._y, self._t, opts)
     self._y = self._y + 20 + (opts.gap or 4)
+end
+
+-- Table statis 2 kolom
+-- headers = {"Key","Value"} atau nil (tanpa header)
+-- rows    = { {"baris1col1","baris1col2"}, ... }
+-- opts: colWidths={0.38,0.62}, rowHeight=22, note="teks kecil bawah", gap
+function Section:Table(headers, rows, opts)
+    opts = opts or {}
+    local _, h = _mkTable(self._c, headers, rows, self._y, self._t, opts, self._depth)
+    self._y = self._y + h + (opts.gap or DEFAULT_GAP)
 end
 
 -- Copy button — label + tombol Copy di kanan
@@ -2613,13 +2770,18 @@ function LuluUI.new(cfg)
     makeHover(closeBtn, theme.accentDark, theme.sidebar)
 
     --  Sidebar 
-    local leftPanel = Instance.new("Frame")
-    leftPanel.Size = UDim2.new(0, 90, 1, -HDR_H)
-    leftPanel.Position = UDim2.new(0, 0, 0, HDR_H)
-    leftPanel.BackgroundColor3 = theme.sidebarBg
-    leftPanel.BackgroundTransparency = 0.2
-    leftPanel.BorderSizePixel = 0
-    leftPanel.Parent = mainFrame
+    local leftPanel = Instance.new("ScrollingFrame")
+    leftPanel.Size                       = UDim2.new(0, 90, 1, -HDR_H)
+    leftPanel.Position                   = UDim2.new(0, 0, 0, HDR_H)
+    leftPanel.BackgroundColor3           = theme.sidebarBg
+    leftPanel.BackgroundTransparency     = 0.2
+    leftPanel.BorderSizePixel            = 0
+    leftPanel.ScrollBarThickness         = 2
+    leftPanel.ScrollBarImageColor3       = theme.accent
+    leftPanel.ScrollBarImageTransparency = 0.4
+    leftPanel.CanvasSize                 = UDim2.new(0, 0, 0, 0)
+    leftPanel.ScrollingDirection         = Enum.ScrollingDirection.Y
+    leftPanel.Parent                     = mainFrame
     -- Corner bawah-kiri supaya ngikut batas mainFrame
     mkCorner(leftPanel, 3)
     self.leftPanel = leftPanel
@@ -2846,7 +3008,7 @@ function LuluUI.new(cfg)
         descText.Size                = UDim2.new(0, 220, 0, 25)
         descText.Position            = UDim2.new(0, -230, 0, 62)  -- offscreen kiri
         descText.BackgroundTransparency = 1
-        descText.Text                = "Beautiful UI v1.3.3 [Search + Resize]"
+        descText.Text                = "Beautiful UI v1.3.3 [StarDevVersion]
         descText.Font                = Enum.Font.Gotham
         descText.TextSize            = 14
         descText.TextColor3          = Color3.fromRGB(220, 220, 220)
@@ -3173,6 +3335,7 @@ function Window:Tab(name)
     makeHover(btn, theme.sidebarBg, Color3.fromRGB(180, 130, 200))
 
     self._tabY = yOff + 36
+    self.leftPanel.CanvasSize = UDim2.new(0, 0, 0, self._tabY + 8)
 
     --  Frame persisten khusus tab ini 
     local frame = Instance.new("ScrollingFrame")
@@ -3212,6 +3375,7 @@ function Window:Tab(name)
     function api:Divider(opts)             sec:Divider(opts)                   end
     function api:Separator(text, opts)     sec:Separator(text, opts)           end
     function api:Badge(text, opts)         sec:Badge(text, opts)               end
+    function api:Table(headers, rows, opts) sec:Table(headers, rows, opts)     end
     function api:Button(text, cb, opts)    sec:Button(text, cb, opts)          end
     function api:HalfButtons(tA,tB,cA,cB,opts) sec:HalfButtons(tA,tB,cA,cB,opts) end
     function api:Toggle(lbl,def,cb,opts)   sec:Toggle(lbl,def,cb,opts)         end
