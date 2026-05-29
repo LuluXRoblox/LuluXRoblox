@@ -3008,7 +3008,7 @@ function LuluUI.new(cfg)
         descText.Size                = UDim2.new(0, 220, 0, 25)
         descText.Position            = UDim2.new(0, -230, 0, 62)  -- offscreen kiri
         descText.BackgroundTransparency = 1
-        descText.Text                = "Beautiful UI v1.3.3 [StarDevVersion]
+        descText.Text                = "Beautiful UI v1.3.3 [StarDevVersion]"
         descText.Font                = Enum.Font.Gotham
         descText.TextSize            = 14
         descText.TextColor3          = Color3.fromRGB(220, 220, 220)
